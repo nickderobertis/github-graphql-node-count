@@ -164,6 +164,13 @@ jobs:
         with:
           tool: just
 
+      # setup-llmlint.sh installs llmlint from PyPI with `uv tool`, and this is
+      # a Rust repository — nothing else here provisions uv, and the runner image
+      # does not ship it. The script treats a missing uv as a session-startup
+      # nuisance and exits 0 after logging a pointer, which in CI means the next
+      # step is the first to notice. Provision it here so it never has to.
+      - uses: astral-sh/setup-uv@v6
+
       - name: Install oneharness + llmlint
         run: |
           just setup-llmlint
