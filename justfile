@@ -35,7 +35,7 @@ default:
 
 # Set up the project from a clean clone.
 bootstrap:
-    @bash scripts/nx.sh run-many -t bootstrap --parallel=1
+    @just nx run-many -t bootstrap --parallel=1
 
 # The Rust toolchain and cargo dev tools every crate project needs.
 _cargo-bootstrap:
@@ -71,7 +71,13 @@ _ensure-tool tool:
 # the weaker tier.
 check tier="affected":
     @cargo llvm-cov clean --workspace
-    @{{ if tier == "all" { "bash scripts/nx.sh run-many" } else if tier == "affected" { "bash scripts/nx-affected.sh" } else { error("unknown tier '" + tier + "' — use 'affected' (the default) or 'all'") } }} -t format-check lint doc test coverage
+    @tier={{ if tier == "all" { "all" } else if tier == "affected" { "affected" } else { error("unknown tier '" + tier + "' — use 'affected' (the default) or 'all'") } }}; \
+      base="$(bash scripts/merge-base.sh)"; \
+      if [ "$tier" = "all" ] || [ -z "$base" ]; then \
+        just nx run-many -t format-check lint doc test coverage; \
+      else \
+        just nx affected --base="$base" --head=HEAD -t format-check lint doc test coverage; \
+      fi
     @echo "check: ok"
 
 # The complete pre-push bar: the deterministic gate plus the LLM-judge tier scoped
@@ -84,35 +90,39 @@ gate base="origin/main": check (lint-llm-diff base)
 # it measures coverage but does not enforce the floor — `just check` does that,
 # over the union.
 test:
-    @bash scripts/nx-affected.sh -t test
+    @base="$(bash scripts/merge-base.sh)"; \
+      if [ -z "$base" ]; then just nx run-many -t test; \
+      else just nx affected --base="$base" --head=HEAD -t test; fi
 
 # The end-to-end tier on its own, for iterating. It is a project of its own that
 # takes the crate as an ordinary dependency, so it drives only the published
 # surface; `just check` runs it at the same tier as everything else, so it is
 # gated on every change rather than opt-in.
 test-e2e:
-    @bash scripts/nx.sh run github-graphql-node-count-e2e:test
+    @just nx run github-graphql-node-count-e2e:test
 
 # Lint every project this change can reach; any warning is an error.
 lint:
-    @bash scripts/nx-affected.sh -t lint
+    @base="$(bash scripts/merge-base.sh)"; \
+      if [ -z "$base" ]; then just nx run-many -t lint; \
+      else just nx affected --base="$base" --head=HEAD -t lint; fi
 
 # Format the whole tree in place — formatting is not a "what changed" question.
 format:
-    @bash scripts/nx.sh run-many -t format
+    @just nx run-many -t format
 
 # Verify formatting without modifying files.
 fmt-check:
-    @bash scripts/nx.sh run-many -t format-check
+    @just nx run-many -t format-check
 
 # Build every crate's docs; warnings and failing doc examples are errors.
 doc:
-    @bash scripts/nx.sh run-many -t doc
+    @just nx run-many -t doc
 
 # The coverage floor over the union of every project's test run.
 coverage:
     @cargo llvm-cov clean --workspace
-    @bash scripts/nx.sh run workspace:coverage
+    @just nx run workspace:coverage
 
 # Upgrade dependencies, then re-run the gate as a full sweep: an upgrade can
 # reach any project, so the affected set would understate it.

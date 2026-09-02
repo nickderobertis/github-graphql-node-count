@@ -23,9 +23,9 @@ let document = r#"
 let variables = Variables::from([("repos".to_string(), 50)]);
 
 // 50 repositories + 50 x 10 issues.
-assert_eq!(node_count(document, &variables)?, 550);
-assert!(node_count(document, &variables)? < NODE_LIMIT);
-# Ok::<(), github_graphql_node_count::NodeCountError>(())
+let nodes = node_count(document, &variables).expect("a well-formed document counts");
+assert_eq!(nodes, 550);
+assert!(nodes < NODE_LIMIT);
 ```
 
 ## What it is for
