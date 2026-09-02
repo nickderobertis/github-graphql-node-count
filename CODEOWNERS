@@ -1,0 +1,3 @@
+# One maintainer today; the file exists so review routing is declared rather than
+# implied, and so a second owner is one line away.
+*       @nickderobertis

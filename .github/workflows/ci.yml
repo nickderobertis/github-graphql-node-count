@@ -1,0 +1,167 @@
+# Prove the crate from a clean checkout: bootstrap, then the gate.
+#
+# Both gate runs go through the same `just check` recipe, so local and CI cannot
+# drift; the tier is a flag on it:
+#
+#   * an ordinary pull request runs the AFFECTED tier — the projects the diff can
+#     reach, keyed off an explicitly derived merge base;
+#   * the release PR runs the BROADER tier — one full sweep over every project.
+#     This repository batches releases behind a release-plz release PR, so the
+#     commit that ships is one no merge job swept; release-prep is where the sweep
+#     belongs, and merge-to-main stays on the affected tier. See "Commits,
+#     releases, and merging" in AGENTS.md.
+#
+# Both are the `check` job, so there is one required context whichever tier it
+# ran. Nothing downstream re-gates: the tag-triggered release.yml builds and
+# publishes an already-swept commit.
+#
+# The required set on the protected default branch is exactly the jobs below that
+# verify a change — `check`, `deps`, `commitlint` and `llmlint`. A job renamed
+# here moves those contexts, the setup_github_governance.py invocation, and
+# AGENTS.md together.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: read-only by default, widened per job only where needed.
+permissions:
+  contents: read
+
+jobs:
+  # The gate. One Linux runner: the crate is pure computation over a `&str` with
+  # no I/O and no platform-conditional code, so a matrix would triple CI for
+  # identical arithmetic (recorded in AGENTS.md under "Excluded, and why").
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: affected detection resolves the merge base from it, and a
+      # shallow checkout would make that base non-deterministic.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # rust-toolchain.toml is the single source of the channel and components,
+      # so nothing here pins a second copy that could drift from it.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-nextest,cargo-llvm-cov
+
+      - name: Bootstrap
+        run: just bootstrap
+
+      # The release PR is release-prep: it ships a commit no merge job swept, so
+      # it is the one place the broader tier runs. `github.head_ref` is empty on a
+      # push, which selects the affected tier there.
+      - name: Choose the tier
+        id: tier
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "${HEAD_REF}" == release-plz-* ]]; then
+            echo "tier=all" >> "$GITHUB_OUTPUT"
+          else
+            echo "tier=affected" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check
+        run: just check ${{ steps.tier.outputs.tier }}
+
+  # Supply chain: advisories, the licence allow-list, banned and unvetted
+  # sources, and unused dependencies. Its own job because `cargo deny` fetches an
+  # advisory database, and `just check` stays offline.
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny,cargo-machete
+
+      - name: Advisory, licence and unused-dependency audit
+        run: just deps-check
+
+  # The PR title becomes the squash commit release-plz reads, so a malformed one
+  # must not merge. Required, alongside the gate.
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # LLM-judge tier — a blocking PR check, SEPARATE from the `check` gate. It is
+  # non-deterministic and needs an authenticated harness, so it never runs inside
+  # `just check`. Scoped to the merge-base diff so a PR pays for its own changes.
+  # It REQUIRES the harness credential and fails fast without it; it never no-ops
+  # to green, which would report unlinted files as clean. Fork PRs are handled at
+  # the repository level (Settings -> Actions -> General -> Fork pull request
+  # workflows -> Require approval), not by a no-op branch here.
+  llmlint:
+    if: github.event_name == 'pull_request' && github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch main (diff base)
+        run: git fetch --no-tags --depth=2147483647 origin main
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install oneharness + llmlint
+        run: |
+          ./scripts/setup-llmlint.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # setup-llmlint.sh installs llmlint + oneharness only, NOT a harness — so
+      # CI must install one oneharness.toml's fallback list names, else the lint
+      # step skips every file and still passes.
+      - name: Install the coding harness (claude-code)
+        run: npm i -g @anthropic-ai/claude-code
+
+      # Deterministic and model-free: config structure, `llmlint: ignore`
+      # directives naming real rules, and fragment version bumps. No credential,
+      # so it runs before the paid model tier and fails fast on a config slip.
+      - name: Validate llmlint config (no model)
+        run: just lint-llm-validate --diff-base origin/main
+
+      - name: Lint changed files
+        env:
+          HARNESS_KEY: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "${HARNESS_KEY:-}" ]; then
+            echo "::error::llmlint needs a harness credential. Add" \
+                 "CLAUDE_CODE_OAUTH_TOKEN under Settings -> Secrets and variables" \
+                 "-> Actions. Fork PRs are gated by the" \
+                 "require-approval-for-fork-workflows setting." >&2
+            exit 1
+          fi
+          just lint-llm-diff origin/main
