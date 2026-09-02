@@ -1,3 +1,5 @@
-# No `msrv`: this crate promises no minimum supported Rust version, so clippy has
-# no floor to hold API suggestions to. See AGENTS.md ("Excluded, and why").
+# Make clippy MSRV-aware so it never suggests an API newer than the minimum
+# supported Rust version. One source of truth: `rust-version` in the root
+# Cargo.toml's [workspace.package], which `just msrv` builds against.
+msrv = "1.86"
 avoid-breaking-exported-api = false

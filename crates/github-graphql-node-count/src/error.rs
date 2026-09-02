@@ -4,11 +4,43 @@ use std::fmt;
 
 use graphql_parser::Pos;
 
+/// Which argument a connection took its page size from.
+///
+/// GraphQL and GitHub define exactly these two, so the set is closed and a
+/// consumer may match it exhaustively.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageSizeArgument {
+    /// `first:` — a forward page.
+    First,
+    /// `last:` — a backward page.
+    Last,
+}
+
+impl PageSizeArgument {
+    /// The argument name as a document spells it.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::First => "first",
+            Self::Last => "last",
+        }
+    }
+}
+
+impl fmt::Display for PageSizeArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Where in the document a problem was found, rendered as `line:column`.
 ///
 /// `graphql-parser` reports a position for every field and fragment, so an error
 /// can point a reader at the text that caused it rather than at the whole
 /// document.
+// llmlint: ignore[invalid_states_unrepresentable] a 1-based line/column arrives from the
+// parser as a plain `usize` and is only ever rendered; narrowing it to `NonZeroUsize` would
+// buy an unrepresentable zero at the price of an unreachable fallback at the `From<Pos>`
+// boundary — trading a state nothing constructs for a branch no test can cover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
     /// 1-based line number.
@@ -64,8 +96,8 @@ pub enum NodeCountError {
     UnboundVariable {
         /// The field carrying the argument, as the document spells it.
         field: String,
-        /// `first` or `last`.
-        argument: String,
+        /// Which page-size argument it was.
+        argument: PageSizeArgument,
         /// The variable name, without the leading `$`.
         variable: String,
         /// Where the field appears in the document.
@@ -75,8 +107,8 @@ pub enum NodeCountError {
     PageSizeOutOfRange {
         /// The field carrying the argument, as the document spells it.
         field: String,
-        /// `first` or `last`.
-        argument: String,
+        /// Which page-size argument it was.
+        argument: PageSizeArgument,
         /// The page size that was rejected.
         value: i64,
         /// Where the field appears in the document.
@@ -86,8 +118,8 @@ pub enum NodeCountError {
     PageSizeNotAnInteger {
         /// The field carrying the argument, as the document spells it.
         field: String,
-        /// `first` or `last`.
-        argument: String,
+        /// Which page-size argument it was.
+        argument: PageSizeArgument,
         /// The argument value as the document wrote it.
         found: String,
         /// Where the field appears in the document.

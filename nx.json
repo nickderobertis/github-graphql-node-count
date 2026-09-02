@@ -57,7 +57,13 @@
       ]
     },
     "test": {
-      "cache": false
+      "cache": true,
+      "inputs": [
+        "default"
+      ],
+      "outputs": [
+        "{workspaceRoot}/target/llvm-cov-target"
+      ]
     },
     "coverage": {
       "cache": false
@@ -69,6 +75,12 @@
         {
           "env": "LLMLINT_DIFF_BASE_SHA"
         }
+      ]
+    },
+    "build": {
+      "cache": true,
+      "inputs": [
+        "default"
       ]
     }
   }

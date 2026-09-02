@@ -3,7 +3,9 @@
 
 use std::error::Error;
 
-use github_graphql_node_count::{node_count, NodeCountError, Position, Variables};
+use github_graphql_node_count::{
+    node_count, NodeCountError, PageSizeArgument, Position, Variables,
+};
 
 /// No page-size variables bound at all.
 fn unbound() -> Variables {
@@ -18,8 +20,6 @@ fn error_from(document: &str, variables: &Variables) -> NodeCountError {
     }
 }
 
-// --- text that does not parse as GraphQL ----------------------------------
-
 const UNPARSEABLE: &str = "query { viewer { repositories(first: 10) ";
 
 #[test]
@@ -32,8 +32,6 @@ fn text_that_is_not_graphql_is_an_error() {
         "{shown}"
     );
 }
-
-// --- a document declaring no operation ------------------------------------
 
 const FRAGMENT_ONLY: &str = r#"
 fragment RepositoryIssues on Repository {
@@ -50,8 +48,6 @@ fn a_document_with_no_operation_is_an_error() {
         "the document declares no operation to count"
     );
 }
-
-// --- a document declaring more than one operation -------------------------
 
 const TWO_OPERATIONS: &str = r#"
 query ViewerRepositories {
@@ -99,8 +95,6 @@ fn anonymous_operations_are_named_in_the_error() {
     );
 }
 
-// --- a `first:`/`last:` naming an unbound variable ------------------------
-
 const UNBOUND_PAGE_VARIABLE: &str = r#"
 query ViewerRepositories($page: Int!) {
   viewer {
@@ -116,7 +110,7 @@ fn a_page_size_variable_the_caller_did_not_bind_is_an_error() {
         error,
         NodeCountError::UnboundVariable {
             field: "repositories".to_string(),
-            argument: "first".to_string(),
+            argument: PageSizeArgument::First,
             variable: "page".to_string(),
             position: Position { line: 4, column: 5 },
         }
@@ -150,8 +144,6 @@ fn a_declared_default_does_not_stand_in_for_a_binding() {
     assert_eq!(node_count(PAGE_VARIABLE_WITH_A_DEFAULT, &bound), Ok(10));
 }
 
-// --- a `first:`/`last:` outside 1..=100 -----------------------------------
-
 const LITERAL_ABOVE_THE_RANGE: &str = r#"
 query {
   viewer {
@@ -183,7 +175,7 @@ fn a_literal_page_size_outside_the_range_is_an_error() {
         error,
         NodeCountError::PageSizeOutOfRange {
             field: "repositories".to_string(),
-            argument: "first".to_string(),
+            argument: PageSizeArgument::First,
             value: 101,
             position: Position { line: 4, column: 5 },
         }
@@ -255,8 +247,6 @@ fn a_page_size_too_large_for_an_i64_is_refused_by_the_parser() {
     assert!(error.to_string().contains("4:25"), "{error}");
 }
 
-// --- a `first:`/`last:` that is not an integer ----------------------------
-
 const PAGE_SIZE_IS_A_STRING: &str = r#"
 query {
   viewer {
@@ -272,7 +262,7 @@ fn a_page_size_that_is_not_an_integer_is_an_error() {
         error,
         NodeCountError::PageSizeNotAnInteger {
             field: "repositories".to_string(),
-            argument: "first".to_string(),
+            argument: PageSizeArgument::First,
             found: "\"ten\"".to_string(),
             position: Position { line: 4, column: 5 },
         }
@@ -283,8 +273,6 @@ fn a_page_size_that_is_not_an_integer_is_an_error() {
         "{shown}"
     );
 }
-
-// --- a spread naming an undefined fragment --------------------------------
 
 const UNDEFINED_FRAGMENT: &str = r#"
 query {
@@ -313,8 +301,6 @@ fn a_spread_naming_an_undefined_fragment_is_an_error() {
     assert!(shown.contains("...RepositoryIssues"), "{shown}");
     assert!(shown.contains("at 5:25,"), "{shown}");
 }
-
-// --- a cycle of fragment spreads ------------------------------------------
 
 const FRAGMENT_CYCLE: &str = r#"
 query {
@@ -366,8 +352,6 @@ fn one_fragment_spread_on_two_paths_is_not_a_cycle() {
         Ok(FRAGMENT_SPREAD_TWICE_NODES)
     );
 }
-
-// --- arithmetic that outgrows a u64 ---------------------------------------
 
 /// A document nesting `deep(first: 100)` `levels` deep, with `innermost` spliced
 /// into the middle. Generated rather than transcribed: these fixtures exist to
@@ -423,8 +407,6 @@ fn a_sum_across_siblings_that_outgrows_a_u64_is_an_error() {
         "{error:?}"
     );
 }
-
-// --- the error type's own surface -----------------------------------------
 
 #[test]
 fn the_error_type_is_a_std_error_that_is_debuggable_and_comparable() {
@@ -508,7 +490,7 @@ fn an_error_on_an_aliased_field_names_the_alias_and_the_field() {
         error,
         NodeCountError::PageSizeOutOfRange {
             field: "repos:repositories".to_string(),
-            argument: "first".to_string(),
+            argument: PageSizeArgument::First,
             value: 250,
             position: Position { line: 4, column: 5 },
         }
@@ -517,4 +499,30 @@ fn an_error_on_an_aliased_field_names_the_alias_and_the_field() {
         error.to_string().contains("`repos:repositories`"),
         "{error}"
     );
+}
+
+#[test]
+fn the_page_size_argument_names_the_two_arguments_github_defines() {
+    assert_eq!(PageSizeArgument::First.as_str(), "first");
+    assert_eq!(PageSizeArgument::Last.as_str(), "last");
+    assert_eq!(PageSizeArgument::Last.to_string(), "last");
+    assert_eq!(format!("{:?}", PageSizeArgument::First), "First");
+    assert_ne!(PageSizeArgument::First, PageSizeArgument::Last);
+    // Copy and Clone, as a consumer holding one out of an error would use them.
+    let copied = PageSizeArgument::Last;
+    assert_eq!(copied, PageSizeArgument::Last.clone());
+
+    // The `last:` spelling reaches the same error path, named as itself.
+    let error = error_from(LITERAL_BELOW_THE_RANGE, &unbound());
+    assert!(
+        matches!(
+            error,
+            NodeCountError::PageSizeOutOfRange {
+                argument: PageSizeArgument::Last,
+                ..
+            }
+        ),
+        "{error:?}"
+    );
+    assert!(error.to_string().contains("`last: 0`"), "{error}");
 }

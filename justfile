@@ -74,9 +74,9 @@ check tier="affected":
     @tier={{ if tier == "all" { "all" } else if tier == "affected" { "affected" } else { error("unknown tier '" + tier + "' — use 'affected' (the default) or 'all'") } }}; \
       base="$(bash scripts/merge-base.sh)"; \
       if [ "$tier" = "all" ] || [ -z "$base" ]; then \
-        just nx run-many -t format-check lint doc test coverage; \
+        just nx run-many -t format-check lint build doc test coverage; \
       else \
-        just nx affected --base="$base" --head=HEAD -t format-check lint doc test coverage; \
+        just nx affected --base="$base" --head=HEAD -t format-check lint build doc test coverage; \
       fi
     @echo "check: ok"
 
@@ -131,6 +131,23 @@ upgrade:
     @npm update --silent --no-audit --no-fund
     @just check all
 
+# Build under the declared minimum supported Rust version. `rust-version` in the
+# root Cargo.toml is the one source; this recipe reads it rather than repeating
+# it. Separate from `check` because it needs a second toolchain installed; CI
+# runs it as its own job.
+msrv:
+    @floor="$(sed -n 's/^rust-version *= *"\([^"]*\)".*/\1/p' Cargo.toml)"; \
+      rustup toolchain install "$floor" --profile minimal >/dev/null 2>&1 || true; \
+      RUSTFLAGS="-D warnings" cargo +"$floor" check --workspace --locked --all-targets --quiet \
+        || { echo "the $floor floor no longer builds — install that toolchain, or raise rust-version in Cargo.toml (and clippy.toml)" >&2; exit 1; }
+
+# Prove the path a consumer takes (`cargo add`): package the crate and build the
+# README's example against that package in a project of its own. Separate from
+# `check` because it resolves dependencies from crates.io; CI runs it as its own
+# job.
+install-smoke:
+    @./scripts/install-smoke.sh
+
 # Separate from `check`: `cargo deny` fetches an advisory database, and the gate
 # stays offline. CI runs this as its own job.
 deps-check:
@@ -145,8 +162,6 @@ deps-check:
 nx *ARGS:
     @bash scripts/nx.sh {{ARGS}}
 
-# --- per-project bodies, named by each crate's project.json ----------------
-
 # Format one crate in place.
 _crate-format crate:
     @cargo fmt -p {{crate}}
@@ -155,6 +170,11 @@ _crate-format crate:
 _crate-fmt-check crate:
     @cargo fmt -p {{crate}} -- --check \
       || { echo "formatting drift above — run 'just format'" >&2; exit 1; }
+
+# Build one crate, so the gate proves it compiles as a consumer would build it
+# rather than only as its own tests do.
+_crate-build crate:
+    @cargo build -p {{crate}} --locked --quiet
 
 # Lint one crate with clippy; any warning is an error.
 _crate-lint crate:
@@ -179,8 +199,6 @@ _coverage-report:
     @cargo llvm-cov report --fail-under-lines {{coverage-floor}} \
       --ignore-filename-regex '{{coverage-exclude}}' \
       || { echo "line coverage of the library's own source fell below {{coverage-floor}}% — cover the lines the table above counts as missed" >&2; exit 1; }
-
-# --- session and LLM-judge tiers -------------------------------------------
 
 # Ensures `just`, verifies the rest, then runs setup-llmlint. Runs automatically
 # via the Claude Code SessionStart hook; this is the manual entry point.

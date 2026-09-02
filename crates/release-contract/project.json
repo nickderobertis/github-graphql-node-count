@@ -17,6 +17,9 @@
     "lint": {
       "command": "just _crate-lint release-contract"
     },
+    "build": {
+      "command": "just _crate-build release-contract"
+    },
     "test": {
       "command": "just _crate-test release-contract",
       "inputs": [

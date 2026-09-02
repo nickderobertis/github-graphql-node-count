@@ -258,3 +258,71 @@ fn every_crate_this_repository_publishes_is_declared() {
         "release.yml and release-targets.toml disagree about what is published",
     );
 }
+
+/// An Nx project definition, enough of it to read the tags and the graph edges.
+#[derive(Debug, Deserialize)]
+struct Project {
+    name: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+/// Every workspace member's `project.json` beside its `Cargo.toml`, with the
+/// dependency names its manifest declares on other workspace members.
+fn projects_with_workspace_dependencies() -> Vec<(Project, BTreeSet<String>)> {
+    let root = repo_root();
+    let members: BTreeSet<String> = workspace_members()
+        .into_iter()
+        .map(|(_, manifest)| manifest.package.name)
+        .collect();
+    workspace_members()
+        .into_iter()
+        .map(|(manifest_path, _)| {
+            let dir = Path::new(&manifest_path)
+                .parent()
+                .expect("a crate directory");
+            let project: Project =
+                serde_json::from_str(&read(&root.join(dir).join("project.json")))
+                    .unwrap_or_else(|error| panic!("{}/project.json: {error}", dir.display()));
+            let manifest: toml::Table =
+                toml::from_str(&read(&root.join(&manifest_path))).expect("member manifest");
+            let mut edges = BTreeSet::new();
+            for table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                if let Some(toml::Value::Table(declared)) = manifest.get(table) {
+                    edges.extend(declared.keys().filter(|k| members.contains(*k)).cloned());
+                }
+            }
+            (project, edges)
+        })
+        .collect()
+}
+
+/// The module-boundary rule, in the form a Cargo workspace can enforce.
+///
+/// Nx's own boundary rule is an ESLint rule and there is no JavaScript here, so
+/// the tags are held to their meaning by reading the manifests that draw the real
+/// graph edges. `scope:contract` is the load-bearing one: this project owns an
+/// agreement its consumers hold to, so one convenient dependency on the library
+/// would silently re-attach this suite to every change in the repository, and
+/// nothing would fail to say so.
+#[test]
+fn a_contract_project_depends_on_nothing_in_this_workspace() {
+    let projects = projects_with_workspace_dependencies();
+    assert!(
+        projects
+            .iter()
+            .any(|(project, _)| project.tags.iter().any(|tag| tag == "scope:contract")),
+        "some project is tagged scope:contract",
+    );
+    for (project, edges) in projects {
+        if !project.tags.iter().any(|tag| tag == "scope:contract") {
+            continue;
+        }
+        assert!(
+            edges.is_empty(),
+            "{} is tagged scope:contract but depends on {edges:?}; a contract project \
+             must not depend on the projects that depend on it",
+            project.name,
+        );
+    }
+}

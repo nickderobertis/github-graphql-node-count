@@ -77,7 +77,7 @@
 mod count;
 mod error;
 
-pub use error::{NodeCountError, Position};
+pub use error::{NodeCountError, PageSizeArgument, Position};
 
 /// GitHub's published limit on the number of nodes one query may return.
 ///
@@ -96,6 +96,15 @@ pub const NODE_LIMIT: u64 = 500_000;
 /// need not appear. A variable a `first:`/`last:` *does* reference must, or
 /// [`node_count`] returns [`NodeCountError::UnboundVariable`] — a declared
 /// default value is not consulted.
+///
+/// A `u32` rather than a validated page-size newtype: this alias is a contract
+/// with the repositories that call this crate, restated verbatim in their own
+/// builds, so it is not ours to narrow. The `1..=100` range GitHub requires is
+/// enforced where the value is *used*, and a binding outside it comes back as
+/// [`NodeCountError::PageSizeOutOfRange`] rather than being silently counted.
+// llmlint: ignore[invalid_states_unrepresentable] the type of this alias is a frozen
+// cross-repository contract (see the paragraph above); narrowing it to a newtype would break
+// the consumer written against it, so the range is validated at the one point of use instead.
 pub type Variables = std::collections::BTreeMap<String, u32>;
 
 /// The worst-case number of nodes the one operation in `document` may return,

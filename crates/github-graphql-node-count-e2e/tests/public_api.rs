@@ -7,7 +7,9 @@
 //! examples, the consumer shape `onetaskgraph-github-projects` assembles its
 //! queries in, and inputs that must come back as errors.
 
-use github_graphql_node_count::{node_count, NodeCountError, Variables, NODE_LIMIT};
+use github_graphql_node_count::{
+    node_count, NodeCountError, PageSizeArgument, Variables, NODE_LIMIT,
+};
 
 /// No page-size variables: every page size in the document is a literal.
 fn no_variables() -> Variables {
@@ -153,11 +155,9 @@ fn both_worked_examples_sit_under_the_published_limit() {
     }
 }
 
-// -------------------------------------------------------------------------
 // The consumer shape: one shared fragment concatenated onto each of several
 // operations, giving several documents that each hold exactly one operation —
 // which is how `onetaskgraph-github-projects` builds its query constants.
-// -------------------------------------------------------------------------
 
 /// The fragment every Projects query concatenates. Its `fieldValues` connection
 /// is the cost a document picks up by including it.
@@ -315,8 +315,14 @@ fn a_page_size_github_would_reject_comes_back_as_an_error() {
     let over = Variables::from([("items".to_string(), 500)]);
     let error = node_count(&assemble(ITEMS_PAGE_OPERATION), &over).expect_err("out of range");
     assert!(
-        matches!(&error, NodeCountError::PageSizeOutOfRange { value: 500, argument, .. }
-                 if argument == "first"),
+        matches!(
+            error,
+            NodeCountError::PageSizeOutOfRange {
+                value: 500,
+                argument: PageSizeArgument::First,
+                ..
+            }
+        ),
         "{error:?}"
     );
 

@@ -20,6 +20,9 @@
     "lint": {
       "command": "just _crate-lint github-graphql-node-count-e2e"
     },
+    "build": {
+      "command": "just _crate-build github-graphql-node-count-e2e"
+    },
     "test": {
       "command": "just _crate-test github-graphql-node-count-e2e"
     }

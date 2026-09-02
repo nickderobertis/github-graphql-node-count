@@ -15,8 +15,6 @@ fn page(value: u32) -> Variables {
     Variables::from([("page".to_string(), value)])
 }
 
-// --- multiplication down a nested path ------------------------------------
-
 /// A connection nested inside a connection: the inner page size is charged once
 /// per outer node, not once overall.
 const NESTED_PATH: &str = r#"
@@ -46,8 +44,6 @@ fn a_nested_connection_multiplies_by_its_parents_page_size() {
     );
 }
 
-// --- summation across sibling paths ---------------------------------------
-
 /// Three connections under one parent. An implementation that took the maximum
 /// across siblings instead of the sum would answer 10 here.
 const SIBLING_PATHS: &str = r#"
@@ -72,8 +68,6 @@ fn sibling_connections_sum_rather_than_compete() {
     // The distinguishing assertion: the maximum across the siblings is 10.
     assert_ne!(node_count(SIBLING_PATHS, &no_variables()), Ok(10));
 }
-
-// --- a named fragment definition reached by a spread ----------------------
 
 /// The connection that costs the most sits inside a fragment, so a counter that
 /// ignored fragment definitions would answer 10.
@@ -104,8 +98,6 @@ fn a_spread_counts_the_fragment_it_names() {
         Ok(SPREAD_FRAGMENT_NODES)
     );
 }
-
-// --- an inline fragment on a union ----------------------------------------
 
 /// `timelineItems.nodes` is a union, so the fields under it are reached through
 /// inline fragments — including one nested inside another. `LabeledEvent` costs
@@ -144,8 +136,6 @@ fn an_inline_fragment_on_a_union_counts_against_its_parent() {
     );
 }
 
-// --- a spread reached through another spread ------------------------------
-
 /// `RepositoryIssues` is reachable only through `ViewerRepositories`, so a
 /// counter that resolved one level of spread would answer 6.
 const NESTED_SPREADS: &str = r#"
@@ -176,8 +166,6 @@ fn a_spread_reached_through_another_spread_is_counted() {
         Ok(NESTED_SPREADS_NODES)
     );
 }
-
-// --- one variable spent twice down a single nested path -------------------
 
 /// The shape that matters most to a consumer: one page-size constant reused down
 /// a nested path, so binding it to `n` moves the total by `n` squared.
@@ -229,8 +217,6 @@ fn one_variable_spent_twice_moves_the_total_by_its_square() {
         assert_eq!(total, n + n * n);
     }
 }
-
-// --- `first` and `last`, literal and variable -----------------------------
 
 /// The four spellings of one page size. They differ only in the outer argument,
 /// so anything but an equal count is the crate honouring one form over another.
@@ -320,8 +306,6 @@ fn a_field_supplying_both_first_and_last_takes_the_larger() {
     );
 }
 
-// --- fields that are not connections --------------------------------------
-
 /// Working from text alone, this crate can only see a connection that says
 /// `first`/`last`. A field with no page size adds no nodes and no multiplier —
 /// the documented blind spot, asserted so it stays deliberate.
@@ -347,8 +331,6 @@ fn a_document_with_no_page_size_costs_nothing_here() {
         Ok(NO_PAGE_SIZE_ANYWHERE_NODES)
     );
 }
-
-// --- the operation shapes the parser admits -------------------------------
 
 /// A shorthand operation: a bare selection set with no `query` keyword.
 const SHORTHAND_OPERATION: &str = r#"

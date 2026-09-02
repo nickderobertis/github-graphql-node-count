@@ -24,13 +24,14 @@ use graphql_parser::query::{
     Definition, Document, Field, OperationDefinition, Selection, SelectionSet, Value,
 };
 
-use crate::error::{NodeCountError, Position};
+use crate::error::{NodeCountError, PageSizeArgument, Position};
 use crate::Variables;
 
 /// The two arguments GitHub's connections take a page size through. A field
 /// carrying either is what this crate treats as a connection — see the crate
 /// documentation for what working without a schema therefore cannot detect.
-const PAGE_SIZE_ARGUMENTS: [&str; 2] = ["first", "last"];
+const PAGE_SIZE_ARGUMENTS: [PageSizeArgument; 2] =
+    [PageSizeArgument::First, PageSizeArgument::Last];
 
 /// GitHub's page-size range: `first`/`last` must be at least 1 and at most 100.
 const PAGE_SIZE_RANGE: std::ops::RangeInclusive<i64> = 1..=100;
@@ -174,10 +175,13 @@ impl<'a> Counter<'a> {
     fn page_size(&self, field: &Field<'a, Text<'a>>) -> Result<Option<u32>, NodeCountError> {
         let mut largest: Option<u32> = None;
         for (name, value) in &field.arguments {
-            if !PAGE_SIZE_ARGUMENTS.contains(name) {
+            let Some(argument) = PAGE_SIZE_ARGUMENTS
+                .into_iter()
+                .find(|candidate| candidate.as_str() == *name)
+            else {
                 continue;
-            }
-            let resolved = self.resolve_page_size(field, name, value)?;
+            };
+            let resolved = self.resolve_page_size(field, argument, value)?;
             largest = Some(largest.map_or(resolved, |seen: u32| seen.max(resolved)));
         }
         Ok(largest)
@@ -187,7 +191,7 @@ impl<'a> Counter<'a> {
     fn resolve_page_size(
         &self,
         field: &Field<'a, Text<'a>>,
-        argument: &str,
+        argument: PageSizeArgument,
         value: &Value<'a, Text<'a>>,
     ) -> Result<u32, NodeCountError> {
         let position = Position::from(field.position);
@@ -200,7 +204,7 @@ impl<'a> Counter<'a> {
             Value::Variable(name) => i64::from(*self.variables.get(*name).ok_or_else(|| {
                 NodeCountError::UnboundVariable {
                     field: field_label(field),
-                    argument: argument.to_string(),
+                    argument,
                     variable: (*name).to_string(),
                     position,
                 }
@@ -208,7 +212,7 @@ impl<'a> Counter<'a> {
             other => {
                 return Err(NodeCountError::PageSizeNotAnInteger {
                     field: field_label(field),
-                    argument: argument.to_string(),
+                    argument,
                     found: other.to_string(),
                     position,
                 })
@@ -217,7 +221,7 @@ impl<'a> Counter<'a> {
         if !PAGE_SIZE_RANGE.contains(&raw) {
             return Err(NodeCountError::PageSizeOutOfRange {
                 field: field_label(field),
-                argument: argument.to_string(),
+                argument,
                 value: raw,
                 position,
             });

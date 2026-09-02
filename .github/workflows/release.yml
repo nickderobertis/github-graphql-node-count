@@ -27,7 +27,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml is the single source of the channel and its components.
+      # rustup — preinstalled on the runner — reads it and installs from it on the
+      # first cargo invocation, so nothing here pins a second copy that could drift.
+      - name: Install the pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
 
       # Idempotent: a version already live on crates.io is skipped, so re-running
       # after a partial failure is safe. The tag name arrives through `env` rather
@@ -44,7 +48,24 @@ jobs:
                  "variables -> Actions." >&2
             exit 1
           fi
+          # The tag arrives from the event, so its shape is validated at the
+          # boundary rather than trusted, and it must agree with the version the
+          # release PR wrote into the manifest — a tag naming any other version
+          # would publish something nobody reviewed.
           version="${TAG_NAME#v}"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag '${TAG_NAME}' is not vX.Y.Z; refusing to publish." >&2
+            exit 1
+          fi
+          manifest_version="$(
+            cargo metadata --no-deps --format-version 1 --manifest-path Cargo.toml |
+              python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "github-graphql-node-count"))'
+          )"
+          if [ "${version}" != "${manifest_version}" ]; then
+            echo "::error::tag '${TAG_NAME}' names ${version} but the manifest says" \
+                 "${manifest_version}; refusing to publish a version nobody reviewed." >&2
+            exit 1
+          fi
           if curl --silent --fail --max-time 30 \
                "https://crates.io/api/v1/crates/github-graphql-node-count/${version}" \
                >/dev/null; then

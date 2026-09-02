@@ -34,13 +34,43 @@ while read -r id; do
     ;;
   esac
   name="${id#crate:}"
-  version="$(
-    curl --silent --show-error --fail --max-time 30 \
+  # A 404 means the crate is genuinely not published yet; anything else — a
+  # network failure, a 5xx, a rate limit — is this script failing to find out,
+  # which must not be reported as `absent`. Ask curl for the status separately so
+  # the two are told apart.
+  body="$(
+    curl --silent --max-time 30 --write-out '\n%{http_code}' \
       -H 'User-Agent: github-graphql-node-count release-probe' \
-      "https://crates.io/api/v1/crates/${name}" |
-      sed -n 's/.*"max_stable_version":"\([^"]*\)".*/\1/p'
-  )" || version=""
-  printf '%s %s\n' "$id" "${version:-absent}"
+      "https://crates.io/api/v1/crates/${name}"
+  )" || {
+    echo "release-probe: could not reach crates.io for '$id'" >&2
+    echo "ACTION: check network access to https://crates.io/, then re-run" >&2
+    status=1
+    continue
+  }
+  code="${body##*$'\n'}"
+  case "$code" in
+  200) ;;
+  404)
+    printf '%s absent\n' "$id"
+    continue
+    ;;
+  *)
+    echo "release-probe: crates.io answered HTTP $code for '$id'" >&2
+    echo "ACTION: retry in a minute; if it persists, check https://status.crates.io/" >&2
+    status=1
+    continue
+    ;;
+  esac
+  version="$(printf '%s' "${body%$'\n'*}" |
+    sed -n 's/.*"max_stable_version":"\([^"]*\)".*/\1/p')"
+  if [ -z "$version" ]; then
+    echo "release-probe: crates.io returned no max_stable_version for '$id'" >&2
+    echo "ACTION: inspect https://crates.io/api/v1/crates/${name} — the response shape may have changed" >&2
+    status=1
+    continue
+  fi
+  printf '%s %s\n' "$id" "$version"
 done < <(sed -n 's/^id *= *"\([^"]*\)".*/\1/p' "$declaration")
 
 exit "$status"
