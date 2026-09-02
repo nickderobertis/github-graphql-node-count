@@ -1,0 +1,65 @@
+# Automated releases from Conventional Commits, driven by release-plz.
+#
+# Flow:
+#   1. Commits land on `main` under the squash-merged PR title. Pre-1.0:
+#      feat -> minor, fix/perf/refactor/build -> patch, `!`/BREAKING -> minor;
+#      chore/docs/ci/test/style do not release. See AGENTS.md.
+#   2. The `release-pr` job opens or updates a PR bumping the workspace version
+#      in Cargo.toml + Cargo.lock and writing the CHANGELOG section.
+#   3. Merging that PR makes the `release` job tag `vX.Y.Z` and cut a GitHub
+#      Release. Because that job authenticates with a PAT rather than the default
+#      GITHUB_TOKEN, the tag push actually fires release.yml — which publishes to
+#      crates.io. A GITHUB_TOKEN-created tag triggers nothing, and the release
+#      would silently ship no crate.
+
+[workspace]
+# release-plz versions, changelogs, tags and cuts the GitHub Release; it never
+# runs `cargo publish`. The registry push is the `publish-crate` job in
+# release.yml, keyed off the tag — which is what decouples versioning from
+# building and publishing.
+publish = false
+
+# Compare the public API against the last released version, so a break the author
+# did not mark still bumps correctly. release-plz.yml installs cargo-semver-checks
+# beside release-plz; without it this check is silently skipped.
+semver_check = true
+
+git_tag_name = "v{{ version }}"
+git_release_name = "v{{ version }}"
+
+# Keep-a-Changelog-style grouping. The version bump is computed from the
+# conventional-commit *type*, independent of these display groups.
+[changelog]
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^test", skip = true },
+  { message = "^ci", skip = true },
+  { message = "^chore", skip = true },
+  { message = "^build", skip = true },
+  { message = "^style", skip = true },
+  { body = ".*", group = "Other" },
+]
+
+# The changelog lives at the repository root rather than beside the crate's
+# manifest, which is where release-plz would otherwise write it: one place for a
+# reader arriving at the repository, and one path for the release job to attach.
+# `changelog_path` can only be set per package and resolves from the root
+# Cargo.toml, so this table exists to move that one file.
+[[package]]
+name = "github-graphql-node-count"
+changelog_path = "CHANGELOG.md"
+
+# The two test-only members are not deliverables: they carry `publish = false`,
+# nobody depends on them, and a version of their own would be noise in the
+# changelog everyone reads.
+[[package]]
+name = "github-graphql-node-count-e2e"
+release = false
+
+[[package]]
+name = "release-contract"
+release = false

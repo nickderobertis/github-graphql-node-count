@@ -1,0 +1,70 @@
+# Versioning, changelog and tagging — nothing else.
+#
+# On every push to main, release-plz opens or updates a release PR carrying the
+# next version and its changelog section. Merging that PR bumps the version on
+# main, at which point the `release` job tags `vX.Y.Z` and cuts a GitHub Release.
+# The tag is what triggers release.yml to publish; this workflow builds and
+# publishes nothing itself, and re-runs no gate target.
+#
+# The token is a PAT (RELEASE_PLZ_TOKEN), not the default GITHUB_TOKEN: GitHub
+# suppresses workflow triggers from the default token, so a GITHUB_TOKEN-created
+# tag would fire nothing and the release would silently ship no crate.
+
+name: release-plz
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One release run at a time: two concurrent runs would race the same release PR.
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-plz:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # release-plz.toml sets `semver_check = true`; without this tool beside it
+      # the API-break check is silently skipped.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+
+      - name: Fail fast without the release PAT
+        env:
+          RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          if [ -z "${RELEASE_PLZ_TOKEN:-}" ]; then
+            echo "::error::release-plz needs RELEASE_PLZ_TOKEN (a PAT scoped to" \
+                 "contents and pull-requests). A GITHUB_TOKEN-created tag fires no" \
+                 "workflow, so the release would publish nothing." >&2
+            exit 1
+          fi
+
+      - name: Open or update the release PR
+        uses: release-plz/action@v0
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - name: Tag and cut the GitHub Release
+        uses: release-plz/action@v0
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
