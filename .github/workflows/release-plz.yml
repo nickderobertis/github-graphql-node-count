@@ -46,10 +46,13 @@ jobs:
         run: just toolchain
 
       # release-plz.toml sets `semver_check = true`; without this tool beside it
-      # the API-break check is silently skipped.
+      # the API-break check is silently skipped. release-plz itself is installed
+      # here too, and pinned: it is run as a binary rather than through
+      # `release-plz/action`, because that action publishes no `v0` tag and every
+      # run referencing one fails to resolve before a single step executes.
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-semver-checks
+          tool: cargo-semver-checks,release-plz@0.3.160
 
       - name: Fail fast without the release PAT
         env:
@@ -62,16 +65,20 @@ jobs:
             exit 1
           fi
 
-      - name: Open or update the release PR
-        uses: release-plz/action@v0
-        with:
-          command: release-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-
+      # `release` first: it tags whatever version main already carries, so a
+      # merged release PR is tagged on the very next push rather than waiting for
+      # one after it. It carries no registry credential, because `release-plz.toml`
+      # sets `publish = false` — the tag fires release.yml, and that workflow's
+      # `publish-crate` job is the only thing here that reaches crates.io.
       - name: Tag and cut the GitHub Release
-        uses: release-plz/action@v0
-        with:
-          command: release
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: release-plz release
+
+      # Both steps take the token from GIT_TOKEN rather than an argument:
+      # release-plz reads it from there, and an argument list is readable by every
+      # process on the runner.
+      - name: Open or update the release PR
+        env:
+          GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: release-plz release-pr
