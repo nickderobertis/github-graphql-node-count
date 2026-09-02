@@ -75,6 +75,12 @@ How this repo was built up from the create-repo reference pieces.
     toolchain is pinned in `rust-toolchain.toml`.
   - *Benchmark tier* — the computation is one pass over a parsed document; there
     is no hot path to defend.
+  - *`bash` as a composed language* — the shell scripts are build tooling, not a
+    deliverable, so the language references stay `rust` alone (the shape the
+    sibling repositories on this account also compose). The consequence is that
+    `robust_shell` is not a configured rule here, so the two directives inherited
+    from the skill's own script templates name only the rules this composition
+    does have.
 
 ## Command surface
 
