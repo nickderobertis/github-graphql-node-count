@@ -1,0 +1,8 @@
+# Pinned toolchain for reproducible local and CI builds. The channel is an exact
+# stable release so every environment resolves the same compiler; bump it
+# deliberately alongside a `just upgrade`. `llvm-tools` is what `cargo llvm-cov`
+# instruments the coverage floor with.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy", "llvm-tools"]
+profile = "minimal"

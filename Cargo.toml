@@ -1,0 +1,25 @@
+# Virtual workspace manifest. One `Cargo.lock` for the repository; Nx runs the
+# targets, Cargo resolves the dependencies, and both describe the same projects —
+# each crate directory holds its own `Cargo.toml` beside its own `project.json`.
+[workspace]
+resolver = "2"
+members = [
+    "crates/github-graphql-node-count",
+    "crates/github-graphql-node-count-e2e",
+    "crates/release-contract",
+]
+
+# Shared metadata every member inherits, so one logical version spans every
+# manifest and release-plz has a single number to write.
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/nickderobertis/github-graphql-node-count"
+authors = ["Nick DeRobertis <derobertis.nick@gmail.com>"]
+
+[workspace.dependencies]
+github-graphql-node-count = { path = "crates/github-graphql-node-count", version = "0.0.0" }
+graphql-parser = "0.4.1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"

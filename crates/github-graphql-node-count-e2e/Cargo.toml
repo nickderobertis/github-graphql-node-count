@@ -1,0 +1,21 @@
+# The consumer-shaped suite: a workspace member with no `src/`, holding only the
+# tests that drive `github-graphql-node-count` through its published surface, as
+# any other dependent does. It publishes nothing.
+[package]
+name = "github-graphql-node-count-e2e"
+description = "End-to-end suite driving the github-graphql-node-count public API as a dependent does. Not published."
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dev-dependencies]
+github-graphql-node-count = { workspace = true }
+
+# The suite is the only target: this member has no `src/`, because it is a
+# dependent of the crate rather than a second copy of it.
+[[test]]
+name = "public_api"
+path = "tests/public_api.rs"
