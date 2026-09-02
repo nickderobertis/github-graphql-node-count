@@ -24,7 +24,8 @@
       "command": "just _crate-test tooling",
       "inputs": [
         "default",
-        "{workspaceRoot}/scripts/**/*"
+        "{workspaceRoot}/scripts/**/*",
+        "{workspaceRoot}/install/**/*"
       ]
     }
   }

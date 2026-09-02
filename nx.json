@@ -25,6 +25,7 @@
       "{projectRoot}/**/*",
       "{workspaceRoot}/release-targets.toml",
       "{workspaceRoot}/release-plz.toml",
+      "{workspaceRoot}/scripts/publish-crate.sh",
       "{workspaceRoot}/scripts/release-probe.sh",
       "{workspaceRoot}/.github/workflows/release.yml",
       "{workspaceRoot}/.github/workflows/release-plz.yml",

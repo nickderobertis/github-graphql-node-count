@@ -97,27 +97,62 @@ fn workspace_members() -> Vec<(String, Manifest)> {
         .collect()
 }
 
-/// The manifests `.github/workflows/release.yml` runs `cargo publish` against.
+/// The manifests this repository actually publishes, asked of the script that
+/// does the publishing rather than read out of a restatement of it.
 ///
-/// This is what the repository *actually* publishes, read from the one file that
-/// does the publishing rather than restated anywhere.
+/// `scripts/publish-crate.sh` is run in dry-run mode with the registry pointed at
+/// an unreachable address, so it reaches its "would publish" line without a
+/// credential and without contacting crates.io, and names the manifest it would
+/// upload. Anything that changes what the release publishes changes this answer.
 fn published_manifests() -> BTreeSet<String> {
-    let workflow = read(&repo_root().join(".github/workflows/release.yml"));
-    workflow
+    let root = repo_root();
+
+    // The workflow must actually run the script, or the script's answer would be
+    // about something nothing invokes.
+    let workflow = read(&root.join(".github/workflows/release.yml"));
+    assert!(
+        workflow.contains("./scripts/publish-crate.sh"),
+        "release.yml runs scripts/publish-crate.sh",
+    );
+
+    let version = workspace_version();
+    let output = std::process::Command::new("bash")
+        .arg("scripts/publish-crate.sh")
+        .arg(format!("v{version}"))
+        .current_dir(&root)
+        .env("CARGO_REGISTRY_TOKEN", "not-a-real-token")
+        .env("PUBLISH_DRY_RUN", "1")
+        // Unroutable, so the "is it already published?" probe fails fast and the
+        // script proceeds to say what it would publish.
+        .env("CRATES_API", "http://127.0.0.1:1/crates")
+        .output()
+        .expect("run scripts/publish-crate.sh");
+    assert!(
+        output.status.success(),
+        "publish-crate.sh refused a well-formed tag: {}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    String::from_utf8(output.stdout)
+        .expect("utf-8")
         .lines()
-        .filter(|line| line.contains("cargo publish"))
-        .map(|line| {
-            let after = line
-                .split("--manifest-path")
+        .filter_map(|line| line.strip_prefix("would publish "))
+        .map(|rest| {
+            rest.split(" from ")
                 .nth(1)
-                .unwrap_or_else(|| panic!("`cargo publish` without --manifest-path: {line}"));
-            after
-                .split_whitespace()
-                .next()
-                .expect("a manifest path")
+                .expect("the manifest it would publish")
                 .to_string()
         })
         .collect()
+}
+
+/// The one version every manifest inherits, from `[workspace.package]`.
+fn workspace_version() -> String {
+    let workspace: toml::Table =
+        toml::from_str(&read(&repo_root().join("Cargo.toml"))).expect("root Cargo.toml");
+    workspace["workspace"]["package"]["version"]
+        .as_str()
+        .expect("a version")
+        .to_string()
 }
 
 #[test]

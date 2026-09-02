@@ -178,7 +178,10 @@ _crate-fmt-check crate:
       || { echo "formatting drift above — run 'just format'" >&2; exit 1; }
 
 # Build one crate, so the gate proves it compiles as a consumer would build it
-# rather than only as its own tests do.
+# rather than only as its own tests do. Warnings are errors here without a
+# RUSTFLAGS override: `[workspace.lints.rust] warnings = "deny"` in the root
+# Cargo.toml applies to every cargo command over this workspace's own crates, and
+# not to its dependencies. The same holds for the doctest and test recipes below.
 _crate-build crate:
     @cargo build -p {{crate}} --locked --quiet
 

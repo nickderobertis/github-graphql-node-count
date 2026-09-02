@@ -8,6 +8,9 @@
 #
 # Quiet on success in the sense that matters here: the lines it prints *are* the
 # answer, and nothing else goes to stdout.
+#
+# `CRATES_API` overrides the registry base so this script can be driven against a
+# local server in a test; it defaults to crates.io.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,6 +25,7 @@ fi
 # `id = "crate:<name>"` is the only registry this repository publishes to. A
 # target naming another registry is a change this script must grow to answer, so
 # it refuses rather than reporting a wrong answer.
+api="${CRATES_API:-https://crates.io/api/v1/crates}"
 status=0
 while read -r id; do
   case "$id" in
@@ -34,6 +38,14 @@ while read -r id; do
     ;;
   esac
   name="${id#crate:}"
+  # The name reaches a URL, so its shape is checked rather than trusted — a
+  # crates.io package name is letters, digits, `-` and `_`, and never empty.
+  if ! printf '%s' "$name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_-]*$'; then
+    echo "release-probe: '$id' does not name a crates.io package" >&2
+    echo "ACTION: fix the id in release-targets.toml — it is 'crate:<name>'" >&2
+    status=1
+    continue
+  fi
   # A 404 means the crate is genuinely not published yet; anything else — a
   # network failure, a 5xx, a rate limit — is this script failing to find out,
   # which must not be reported as `absent`. Ask curl for the status separately so
@@ -41,10 +53,10 @@ while read -r id; do
   body="$(
     curl --silent --max-time 30 --write-out '\n%{http_code}' \
       -H 'User-Agent: github-graphql-node-count release-probe' \
-      "https://crates.io/api/v1/crates/${name}"
+      "${api}/${name}"
   )" || {
     echo "release-probe: could not reach crates.io for '$id'" >&2
-    echo "ACTION: check network access to https://crates.io/, then re-run" >&2
+    echo "ACTION: check network access to ${api}, then re-run" >&2
     status=1
     continue
   }
@@ -56,7 +68,7 @@ while read -r id; do
     continue
     ;;
   *)
-    echo "release-probe: crates.io answered HTTP $code for '$id'" >&2
+    echo "release-probe: the registry answered HTTP $code for '$id'" >&2
     echo "ACTION: retry in a minute; if it persists, check https://status.crates.io/" >&2
     status=1
     continue
@@ -64,9 +76,12 @@ while read -r id; do
   esac
   version="$(printf '%s' "${body%$'\n'*}" |
     sed -n 's/.*"max_stable_version":"\([^"]*\)".*/\1/p')"
-  if [ -z "$version" ]; then
-    echo "release-probe: crates.io returned no max_stable_version for '$id'" >&2
-    echo "ACTION: inspect https://crates.io/api/v1/crates/${name} — the response shape may have changed" >&2
+  # The registry's answer is third-party input, so its shape is checked before it
+  # is printed as this repository's answer: a semver version is digits, letters,
+  # `.`, `-` and `+`.
+  if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*$'; then
+    echo "release-probe: the registry returned no usable version for '$id'" >&2
+    echo "ACTION: inspect ${api}/${name} — the response shape may have changed" >&2
     status=1
     continue
   fi

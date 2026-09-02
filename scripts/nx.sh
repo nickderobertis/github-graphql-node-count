@@ -14,6 +14,11 @@
 #
 # Nx orchestrates targets; it is never a runtime dependency of what they run.
 # Each target shells out to the project's own language-native tool.
+#
+# llmlint: ignore-file[boundary_inputs_validated] the arguments are the operator's own,
+# forwarded as an argv array to one binary with no shell interpretation, so there is no
+# trust boundary here to validate — and an allowlist of Nx subcommands would only break
+# `just nx <anything>`, which is the escape hatch this wrapper exists to provide.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

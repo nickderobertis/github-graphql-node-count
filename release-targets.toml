@@ -30,7 +30,7 @@ probe = "scripts/release-probe.sh"
 id = "crate:github-graphql-node-count"
 name = "crate"
 what = "The node-count library, as a Rust dependent takes it with `cargo add github-graphql-node-count`."
-published_by = ".github/workflows/release.yml — the `publish-crate` job's `cargo publish`, under crates/github-graphql-node-count/Cargo.toml's [package] name."
+published_by = ".github/workflows/release.yml — the `publish-crate` job, through scripts/publish-crate.sh, under crates/github-graphql-node-count/Cargo.toml's [package] name."
 manifest = "crates/github-graphql-node-count/Cargo.toml"
 
 # Entries of neither kind: `github-graphql-node-count-e2e` and `release-contract`

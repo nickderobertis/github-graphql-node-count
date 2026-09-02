@@ -66,12 +66,7 @@ jobs:
         id: tier
         env:
           HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [[ "${HEAD_REF}" == release-plz-* ]]; then
-            echo "tier=all" >> "$GITHUB_OUTPUT"
-          else
-            echo "tier=affected" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "tier=$(./scripts/gate-tier.sh "$HEAD_REF")" >> "$GITHUB_OUTPUT"
 
       - name: Check
         env:

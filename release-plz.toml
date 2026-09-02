@@ -53,7 +53,7 @@ commit_parsers = [
 name = "github-graphql-node-count"
 changelog_path = "CHANGELOG.md"
 
-# The two test-only members are not deliverables: they carry `publish = false`,
+# The three test-only members are not deliverables: they carry `publish = false`,
 # nobody depends on them, and a version of their own would be noise in the
 # changelog everyone reads.
 [[package]]
@@ -62,4 +62,8 @@ release = false
 
 [[package]]
 name = "release-contract"
+release = false
+
+[[package]]
+name = "tooling"
 release = false

@@ -43,8 +43,9 @@ as a follow-up.
   no `src/`, taking the crate as an ordinary dependency and driving only its
   public surface); `install-smoke` (the crates.io-reaching install-path suite, its
   only edge to the published crate, out of the gate's target list); `tooling`
-  (drives the shell scripts under `scripts/` as subprocesses against real
-  temporary repositories); and `release-contract` (tagged `scope:contract`,
+  (drives the shell scripts under `scripts/` and `install/` as subprocesses against
+  real temporary directories, a real `git`, and a real local HTTP server); and
+  `release-contract` (tagged `scope:contract`,
   depending on nothing here so a library change cannot reach it).
   Every project carries exactly one `scope:` tag, and `SCOPE_POLICY` in
   `release-contract`'s suite says what each scope may depend on — Nx's own
@@ -106,13 +107,12 @@ must not be wrong in.
 `just check` is the **affected tier**; `just check all` is the **broader tier**.
 One command, one CI job, so the tier is a flag rather than a second gate.
 
-Measured on this host, 2026-09-02: the broader tier is **16 s** cold and **4 s**
-with a warm Nx cache (13/14 targets replayed). Both are an order of magnitude
-under the 10-minute budget the affected tier is allowed, so nothing is promoted
-out of it for speed and there is nothing to split. What *is* out of it —
-`deps-check`, `install-smoke`, the `lint-llm*` tier — left because of what it
-touches, not how long it takes. Re-measure before promoting anything; a promotion
-made without a measurement is guessing.
+Nothing is promoted out of the affected tier for speed, and nothing is split for
+it: both tiers finish far inside the budget a contributor will wait through. What
+*is* outside the gate — `deps-check`, `install-smoke`, `msrv`, the `lint-llm*`
+tier — left because of what it touches, not how long it takes. Promote only from a
+fresh measurement; the numbers behind this decision, and how to retake them, are
+in [docs/gate-tiers.md](docs/gate-tiers.md).
 
 The `workspace` project, which owns the aggregate `coverage` target, is always in
 the affected set — coverage is a property of the union rather than of any one
@@ -135,8 +135,10 @@ a slow suite.
   version; release-plz opens a PR writing the version, the manifests and
   `CHANGELOG.md`, and merging it tags `vX.Y.Z` **with a PAT** — the default
   `GITHUB_TOKEN` would create a tag that triggers nothing and ship no crate. The
-  tag fires `release.yml`, which publishes to crates.io, idempotently. Nobody
-  hand-edits a version, hand-tags, or hand-dispatches a publish.
+  tag fires `release.yml`, which runs `scripts/publish-crate.sh`: it refuses a tag
+  that is not `vX.Y.Z` or that names a version the manifest does not, and skips a
+  version already live. Nobody hand-edits a version, hand-tags, or hand-dispatches
+  a publish.
 - **Bump policy (pre-1.0):** `feat` → minor; `feat!` / `BREAKING CHANGE` → minor
   (a break before 1.0 is not a major); `fix` / `perf` / `refactor` / `build` →
   patch; `chore` / `docs` / `ci` / `test` / `style` → no release.
@@ -167,9 +169,12 @@ a slow suite.
 
 ## Tests are context engineering
 
-This is an agent-driven repo: the suite is the only QA loop. Nothing is mocked,
-because there is nothing to mock — the library's whole input is a `&str` and a
-map. Each project's nested `AGENTS.md` carries the rules for its own fixtures.
+This is an agent-driven repo: the suite is the only QA loop. Nothing is mocked:
+the library's whole input is a `&str` and a map, and the shell scripts are driven
+as subprocesses against real directories, a real `git`, and a real local HTTP
+server. The one thing stood in for is the *registry* on the far side of that
+socket — the single third party these tests cannot run. Each project's nested
+`AGENTS.md` carries the rules for its own fixtures.
 
 ## Keeping the allowlist current
 

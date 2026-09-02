@@ -44,6 +44,11 @@ requirement="$(
 [ -n "$requirement" ] ||
   fail "README.md declares no '$CRATE = \"...\"' dependency line" \
     "keep the README's install snippet in the documented form, e.g. $CRATE = \"0\""
+# It is interpolated into a generated manifest, so its shape is checked here: a
+# cargo version requirement is digits, `.`, and the comparison characters.
+printf '%s' "$requirement" | grep -Eq '^[0-9^~=<>* .,+-]+$' ||
+  fail "README.md declares $CRATE = \"$requirement\", which is not a version requirement" \
+    "write a cargo version requirement, e.g. $CRATE = \"0\""
 
 version="$(
   cargo metadata --no-deps --format-version 1 --manifest-path Cargo.toml |

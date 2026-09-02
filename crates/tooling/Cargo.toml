@@ -19,3 +19,23 @@ workspace = true
 [[test]]
 name = "merge_base"
 path = "tests/merge_base.rs"
+
+[[test]]
+name = "gate_tier"
+path = "tests/gate_tier.rs"
+
+[[test]]
+name = "release_probe"
+path = "tests/release_probe.rs"
+
+[[test]]
+name = "publish_crate"
+path = "tests/publish_crate.rs"
+
+[[test]]
+name = "nx_wrapper"
+path = "tests/nx_wrapper.rs"
+
+[[test]]
+name = "install_smoke"
+path = "tests/install_smoke.rs"
