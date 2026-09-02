@@ -65,19 +65,20 @@ jobs:
             exit 1
           fi
 
-      # `release` first: it tags and publishes whatever version main already
-      # carries, so a merged release PR ships on the very next push rather than
-      # waiting for one after it. CARGO_REGISTRY_TOKEN is what makes it publish;
-      # without it the step tags and ships nothing.
+      # `release` first: it tags whatever version main already carries, so a
+      # merged release PR is tagged on the very next push rather than waiting for
+      # one after it. It carries no registry credential, because `release-plz.toml`
+      # sets `publish = false` — the tag fires release.yml, and that workflow's
+      # `publish-crate` job is the only thing here that reaches crates.io.
       - name: Tag and cut the GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: release-plz release --git-token "$GITHUB_TOKEN"
+          GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: release-plz release
 
-      # GIT_TOKEN rather than an argument: release-plz reads the token from there,
-      # and an argument list is readable by every process on the runner.
+      # Both steps take the token from GIT_TOKEN rather than an argument:
+      # release-plz reads it from there, and an argument list is readable by every
+      # process on the runner.
       - name: Open or update the release PR
         env:
           GIT_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-        run: release-plz release-pr --git-token "$GIT_TOKEN"
+        run: release-plz release-pr
