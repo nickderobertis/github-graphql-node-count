@@ -153,6 +153,18 @@ impl Scratch {
         Self { root }
     }
 
+    /// Give the scratch tree a crate manifest saying exactly this, so what the
+    /// script reads out of it is chosen by the test rather than by the repository.
+    fn with_crate_manifest(self, body: &str) -> Self {
+        let manifest = self
+            .root
+            .join("crates/github-graphql-node-count/Cargo.toml");
+        std::fs::create_dir_all(manifest.parent().expect("manifest directory"))
+            .expect("create the crate directory");
+        std::fs::write(&manifest, body).expect("write the crate manifest");
+        self
+    }
+
     fn run(&self, tag: &str, env: &[(&str, &str)]) -> Output {
         let mut command = Command::new("bash");
         command
@@ -166,6 +178,33 @@ impl Scratch {
         }
         command.output().expect("run publish-crate.sh")
     }
+}
+
+#[test]
+fn a_manifest_version_that_is_not_a_version_is_refused_as_itself() {
+    // What `sed` lifts out of the manifest is a line that looked like a version.
+    // Held only against the tag, a mangled manifest would be reported as a
+    // tag/manifest disagreement — pointing the reader at the tag, which is the one
+    // thing here that is well-formed. It is refused for what it actually is.
+    let scratch = Scratch::new("bad-manifest-version").with_crate_manifest(
+        "[package]\nname = \"github-graphql-node-count\"\nversion = \"1.2\"\n",
+    );
+    let output = scratch.run("v1.2.3", &[("CARGO_REGISTRY_TOKEN", "x")]);
+
+    assert!(
+        !output.status.success(),
+        "a manifest version that is not X.Y.Z must not publish"
+    );
+    let stderr = stderr_of(&output);
+    assert!(
+        stderr.contains("the manifest's version '1.2' is not X.Y.Z"),
+        "the refusal names what the manifest said: {stderr}"
+    );
+    assert!(
+        !stderr.contains("but the manifest says"),
+        "a malformed manifest is not a tag disagreement: {stderr}"
+    );
+    assert!(stderr.contains("ACTION:"), "{stderr}");
 }
 
 #[test]

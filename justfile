@@ -29,6 +29,10 @@ coverage-exclude := '(^|/)tests/'
 # Keep the gate's own output to signal: successes are silent, failures are not.
 export CARGO_TERM_QUIET := "true"
 
+# llmlint: ignore[comments_earn_their_place] in a justfile a recipe's preceding
+# comment is not narration but its `just --list` description, and AGENTS.md makes
+# `just --list` this repository's command-surface inventory — deleting this line
+# would leave `default` the one recipe the inventory cannot describe.
 # List available recipes.
 default:
     @just --list

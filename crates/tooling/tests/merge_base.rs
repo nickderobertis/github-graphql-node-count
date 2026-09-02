@@ -242,6 +242,28 @@ fn a_branch_name_that_is_not_one_falls_closed_to_the_full_sweep() {
 }
 
 #[test]
+fn a_name_git_refuses_as_a_ref_falls_closed_to_the_full_sweep() {
+    // Each of these passes a plain character-class check — they are letters, dots
+    // and slashes — yet git refuses every one as a ref. A home-grown pattern that
+    // stopped at the character class would let them through and scope the gate
+    // against a base that cannot exist, so git is asked instead.
+    let checkout = Checkout::new("git-refused-ref");
+    checkout.publish_main();
+
+    for name in ["main..HEAD", "main/", "main.lock"] {
+        let (stdout, stderr) = checkout.run(&[("CI", "1"), ("GITHUB_BASE_REF", name)]);
+        assert!(
+            stdout.is_empty(),
+            "'{name}' printed {stdout:?}; a name git refuses must scope nothing"
+        );
+        assert!(
+            stderr.contains("is not a usable branch name"),
+            "'{name}': {stderr}"
+        );
+    }
+}
+
+#[test]
 fn an_unfetched_base_branch_falls_closed_to_the_full_sweep() {
     // The base branch exists by name but the checkout has no ref for it — the
     // shallow-clone case. Nothing can be derived, so nothing is scoped.

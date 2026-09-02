@@ -2,11 +2,9 @@
 # tracked)
 .gh-secrets-state.json
 
-# Rust build output
 /target
 # Nx + Node (the orchestrator's toolchain; package-lock.json is tracked)
 /node_modules
 /.nx
-# Coverage profiles
 /target/llvm-cov-target
 .logs/

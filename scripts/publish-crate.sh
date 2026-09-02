@@ -70,6 +70,16 @@ fi
   fail "could not read $CRATE's version from $MANIFEST or [workspace.package]" \
     "check that the manifest still declares a version release-plz can write"
 
+# What `sed` pulled out of the manifest is a line that looked like a version, not
+# a version: the extraction is a pattern over text, so its result is held to the
+# same shape the tag was before it decides anything. A manifest mangled into
+# saying something else refuses here, naming what it said, rather than reaching
+# the comparison below and being reported as a tag/manifest disagreement — two
+# different faults that want two different fixes.
+[[ "$manifest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] ||
+  fail "the manifest's version '$manifest_version' is not X.Y.Z; refusing to publish" \
+    "fix the version in $MANIFEST (or [workspace.package]) — release-plz writes a plain X.Y.Z"
+
 [ "$version" = "$manifest_version" ] ||
   fail "tag '$tag' names $version but the manifest says $manifest_version" \
     "delete the tag and let release-plz cut it, rather than publishing a version nobody reviewed"

@@ -33,6 +33,13 @@ if ! printf '%s' "$api" | grep -Eq '^https?://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$'
   echo "ACTION: unset CRATES_API to use crates.io, or set it to an http(s) registry base" >&2
   exit 1
 fi
+# llmlint: ignore[boundary_inputs_validated] nothing read out of this document is
+# used unvalidated: each id is held to `crate:<name>` below, and the name to the
+# crates.io package grammar before it reaches a URL, so a malformed document
+# cannot drive a request its contents did not spell correctly. Parsing it as TOML
+# would change *which* malformed documents are refused, not whether an unchecked
+# value is used — and it would cost this script a TOML parser it otherwise does
+# not need, in a probe whose whole job is one GET against a public registry.
 ids="$(sed -n 's/^id *= *"\([^"]*\)".*/\1/p' "$declaration")" || {
   echo "release-probe: could not read $declaration" >&2
   echo "ACTION: check that it is readable and well-formed TOML" >&2
