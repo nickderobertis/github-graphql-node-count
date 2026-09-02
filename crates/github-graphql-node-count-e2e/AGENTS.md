@@ -15,3 +15,8 @@ It also carries the shape a real consumer assembles — one shared fragment
 concatenated onto each of several operations, giving several single-operation
 documents — because that is how `onetaskgraph-github-projects` builds its query
 constants, and each assembled document must reach its own distinct total.
+
+`frozen_surface` in `tests/public_api.rs` asserts the three promised items at
+compile time, from outside the crate. Renaming, retyping or narrowing any of them
+stops that file compiling — which is where the break belongs, rather than in the
+repository written against them.

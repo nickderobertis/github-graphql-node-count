@@ -342,3 +342,52 @@ fn concatenating_two_operations_into_one_document_is_refused_by_contract() {
         "{error:?}"
     );
 }
+
+/// The three items the consumer's build is written against, asserted at compile
+/// time from outside the crate.
+///
+/// This is the contract two repositories hold to: `onetaskgraph`'s GitHub
+/// Projects source restates exactly these names and types. Renaming, retyping or
+/// narrowing any of them stops this file compiling, which is the point — the
+/// break surfaces here rather than in a repository this one cannot see.
+mod frozen_surface {
+    use super::*;
+
+    /// `node_count(&str, &Variables) -> Result<u64, NodeCountError>`.
+    const _NODE_COUNT: fn(&str, &Variables) -> Result<u64, NodeCountError> = node_count;
+
+    /// `NODE_LIMIT: u64`.
+    const _NODE_LIMIT: u64 = NODE_LIMIT;
+
+    /// `Variables = BTreeMap<String, u32>`, keyed without the leading `$`.
+    const _VARIABLES: fn(std::collections::BTreeMap<String, u32>) -> Variables = |map| map;
+}
+
+#[test]
+fn the_promised_surface_behaves_as_a_consumer_declares_it() {
+    // The map really is a `BTreeMap<String, u32>` a consumer can build itself.
+    let mut variables: std::collections::BTreeMap<String, u32> = Default::default();
+    variables.insert("repos".to_string(), 50);
+    let variables: Variables = variables;
+
+    let document = r#"
+        query($repos: Int!) {
+          viewer { repositories(first: $repos) { edges { node { name } } } }
+        }
+    "#;
+    assert_eq!(node_count(document, &variables), Ok(50));
+    assert_eq!(NODE_LIMIT, 500_000);
+
+    // `NodeCountError` is `#[non_exhaustive]`, so a consumer matching it must
+    // carry a wildcard arm — which is what makes adding a variant non-breaking.
+    let error = node_count("{", &variables).expect_err("unparseable");
+    let described = match &error {
+        NodeCountError::Parse { .. } => "parse",
+        NodeCountError::NoOperation => "no operation",
+        _ => "something else",
+    };
+    assert_eq!(described, "parse");
+    // And it is a `std::error::Error` a consumer can box.
+    let boxed: Box<dyn std::error::Error> = Box::new(error);
+    assert!(!boxed.to_string().is_empty());
+}
