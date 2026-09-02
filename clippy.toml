@@ -1,5 +1,5 @@
-# Make clippy MSRV-aware so it never suggests an API newer than the minimum
-# supported Rust version. One source of truth: `rust-version` in the root
-# Cargo.toml's [workspace.package], which `just msrv` builds against.
-msrv = "1.86"
+# No `msrv` here on purpose: clippy reads the minimum supported Rust version from
+# the manifest's `rust-version`, so the one declaration in the root Cargo.toml's
+# [workspace.package] is also what clippy holds API suggestions to. A second copy
+# would be the same fact restated with nothing keeping the two equal.
 avoid-breaking-exported-api = false

@@ -2,12 +2,20 @@
 # Prove the path a consumer actually takes: `cargo add github-graphql-node-count`.
 #
 # `just bootstrap` sets up the *dev* environment; it says nothing about whether
-# the crate a consumer downloads builds and works. This packages the crate
-# exactly as `cargo publish` would, then compiles and runs the README's example
-# against that package in a throwaway project of its own — so a file missing from
-# the package, a `readme`/`include` path that does not survive packaging, or a
-# public item that only resolves inside this workspace fails here rather than in
-# somebody else's build.
+# the crate a consumer downloads builds and works. This packages the crate exactly
+# as `cargo publish` would, then builds the README's own dependency declaration
+# and its own example against that package, in a throwaway project of its own — so
+# a file missing from the package, a `readme`/`include` path that does not survive
+# packaging, a public item that only resolves inside this workspace, or a README
+# version requirement the crate has outgrown fails here rather than in somebody
+# else's build.
+#
+# The dependency is declared with the **version requirement the README tells
+# consumers to write**, read out of README.md rather than repeated here, alongside
+# a path to the packaged crate. Cargo resolves through the path and still checks
+# the requirement, so the documented declaration is what is proven. A bare
+# registry declaration cannot be: cargo would have to resolve the name from
+# crates.io, which is exactly what this job exists to run *before*.
 #
 # It reaches crates.io to resolve the dependency, so it is not part of `just
 # check`; CI runs it as its own job.
@@ -21,6 +29,17 @@ cd "$ROOT" || {
 }
 
 readonly CRATE="github-graphql-node-count"
+
+# The version requirement README.md tells a consumer to put in their manifest.
+# Read rather than restated, so the two cannot drift.
+requirement="$(
+  sed -n 's/^'"$CRATE"' *= *"\([^"]*\)".*/\1/p' README.md | head -1
+)"
+[ -n "$requirement" ] || {
+  echo "install-smoke: README.md declares no '$CRATE = \"...\"' dependency line" >&2
+  echo "ACTION: keep the README's install snippet in the documented form, e.g. $CRATE = \"0\"" >&2
+  exit 1
+}
 
 version="$(
   cargo metadata --no-deps --format-version 1 --manifest-path Cargo.toml |
@@ -60,7 +79,7 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-$CRATE = { path = "$packaged" }
+$CRATE = { version = "$requirement", path = "$packaged" }
 TOML
 
 # The README's example, verbatim in spirit: what a consumer writes on day one.

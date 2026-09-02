@@ -1,0 +1,14 @@
+{
+  "name": "install-smoke",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["scope:install"],
+  "implicitDependencies": ["github-graphql-node-count"],
+  "targets": {
+    "install-smoke": {
+      "command": "just _install-smoke",
+      "cache": true,
+      "inputs": ["default", "^default"]
+    }
+  }
+}

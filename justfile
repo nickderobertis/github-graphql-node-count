@@ -37,11 +37,17 @@ default:
 bootstrap:
     @just nx run-many -t bootstrap --parallel=1
 
-# The Rust toolchain and cargo dev tools every crate project needs.
-_cargo-bootstrap:
+# Install the pinned toolchain and its components. rust-toolchain.toml is the one
+# source of the channel, so nothing else names a version. `bootstrap` runs this;
+# the CI jobs that need cargo but not the whole dev environment call it directly,
+# rather than hand-rolling rustup in a workflow.
+toolchain:
     @rustup show active-toolchain >/dev/null 2>&1 || rustup toolchain install
     @rustup component add rustfmt clippy llvm-tools >/dev/null \
       || { echo "cannot add toolchain components — install rustup (https://rustup.rs/) and re-run" >&2; exit 1; }
+
+# The Rust toolchain and cargo dev tools every crate project needs.
+_cargo-bootstrap: toolchain
     @just _ensure-tool cargo-nextest
     @just _ensure-tool cargo-llvm-cov
     @cargo fetch --locked --quiet
@@ -146,7 +152,7 @@ msrv:
 # `check` because it resolves dependencies from crates.io; CI runs it as its own
 # job.
 install-smoke:
-    @./scripts/install-smoke.sh
+    @just nx run install-smoke:install-smoke
 
 # Separate from `check`: `cargo deny` fetches an advisory database, and the gate
 # stays offline. CI runs this as its own job.
@@ -185,6 +191,11 @@ _crate-lint crate:
 _crate-doc crate:
     @RUSTDOCFLAGS="-D warnings" cargo doc -p {{crate}} --no-deps --locked --quiet
     @cargo test -p {{crate}} --doc --locked --quiet
+
+# The install-smoke project's body: package the crate and build the README's own
+# dependency declaration against that package.
+_install-smoke:
+    @./install/smoke.sh
 
 # Run one crate's tests under coverage instrumentation, writing raw profile data
 # into the shared directory instead of reporting. The floor is enforced once, by

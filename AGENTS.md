@@ -41,8 +41,10 @@ as a follow-up.
 - **Projects in the graph:** `github-graphql-node-count` (the published crate and
   its fast tier); `github-graphql-node-count-e2e` (a `publish = false` member with
   no `src/`, taking the crate as an ordinary dependency and driving only its
-  public surface); `release-contract` (tagged `scope:contract`, depending on
-  nothing here so a library change cannot reach it).
+  public surface); `install-smoke` (the crates.io-reaching install-path suite, its
+  only edge to the published crate, out of the gate's target list); and
+  `release-contract` (tagged `scope:contract`, depending on nothing here so a
+  library change cannot reach it).
 - **Excluded, and why:**
   - *OS matrix* — pure computation over a `&str`: no I/O, no platform-conditional
     code. One Linux runner proves it; a matrix would triple CI for identical
@@ -70,6 +72,9 @@ show:
 - **`just check` is offline and credential-free.** Keep it that way. Anything
   needing a network or a token is its own recipe and its own CI job —
   `deps-check`, `install-smoke`, `msrv`, and the `lint-llm*` tier.
+- **`just toolchain` is the one place the pinned toolchain is provisioned**, so a
+  CI job never hand-rolls rustup and cannot compile against a different compiler
+  than the gate.
 - **`just gate`** is the pre-push bar: `check` plus the diff-scoped llmlint tier.
 
 ## Coverage
@@ -98,8 +103,10 @@ One command, one CI job, so the tier is a flag rather than a second gate.
 Measured on this host, 2026-09-02: the broader tier is **16 s** cold and **4 s**
 with a warm Nx cache (13/14 targets replayed). Both are an order of magnitude
 under the 10-minute budget the affected tier is allowed, so nothing is promoted
-out of it and there is nothing to split for speed. Re-measure before promoting
-anything; a promotion made without a measurement is guessing.
+out of it for speed and there is nothing to split. What *is* out of it —
+`deps-check`, `install-smoke`, the `lint-llm*` tier — left because of what it
+touches, not how long it takes. Re-measure before promoting anything; a promotion
+made without a measurement is guessing.
 
 The `workspace` project, which owns the aggregate `coverage` target, is always in
 the affected set — coverage is a property of the union rather than of any one
@@ -127,9 +134,12 @@ a slow suite.
 - **Bump policy (pre-1.0):** `feat` → minor; `feat!` / `BREAKING CHANGE` → minor
   (a break before 1.0 is not a major); `fix` / `perf` / `refactor` / `build` →
   patch; `chore` / `docs` / `ci` / `test` / `style` → no release.
-- **The broader tier runs at release-prep**, because this repo batches: the
-  release PR ships a commit no merge job swept. The `check` job runs the full
-  sweep on a `release-plz-*` head branch and the affected tier everywhere else.
+- **The broader tier runs at release-prep, and only there**, because this repo
+  batches: the release PR ships a commit no merge job swept. The `check` job runs
+  the full sweep on a `release-plz-*` head branch and the affected tier
+  everywhere else — including on a push to `main`, where there is no merge base
+  but there is a well-defined one-commit diff, so `scripts/merge-base.sh` scopes
+  against the commit's first parent rather than falling open to a second sweep.
   The tag-triggered publish re-gates nothing.
 - **What this repo publishes** is declared in `release-targets.toml`, and the
   `release-contract` project holds that document to the real release

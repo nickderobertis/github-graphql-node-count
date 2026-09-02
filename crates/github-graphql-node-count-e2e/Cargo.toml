@@ -12,6 +12,9 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 github-graphql-node-count = { workspace = true }
 

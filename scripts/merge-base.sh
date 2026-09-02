@@ -24,13 +24,19 @@ cd "$ROOT" || {
 # reaches `git fetch` as a refspec, so its shape is validated at the boundary
 # instead of trusted: a branch name is what a branch name may look like.
 #
-# In CI its absence is meaningful rather than missing: a push build is *on* the
-# base branch, so scoping against it would find nothing changed and skip every
-# check. No base means run everything.
+# In CI its absence means a push build, which is *on* the base branch: there is no
+# merge base, but there is a well-defined one-commit diff — the commit's first
+# parent. Scoping against that keeps merge-to-main on the affected tier, so the
+# broader sweep stays at exactly one lifecycle point (the release PR). A commit
+# with no parent has no diff to scope by, so that falls closed to the full sweep.
 branch="${NODE_COUNT_NX_BASE_REF:-${GITHUB_BASE_REF:-}}"
 if [ -z "$branch" ]; then
   if [ -n "${CI:-}" ]; then
-    echo "merge-base: not a pull-request build, so every project runs (set NODE_COUNT_NX_BASE_REF to scope one)" >&2
+    if parent="$(git rev-parse --verify --quiet HEAD^ 2>/dev/null)"; then
+      printf '%s' "$parent"
+      exit 0
+    fi
+    echo "merge-base: a push build whose commit has no parent, so every project runs" >&2
     exit 0
   fi
   branch="main"
