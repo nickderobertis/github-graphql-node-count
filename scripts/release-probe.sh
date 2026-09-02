@@ -26,6 +26,13 @@ fi
 # target naming another registry is a change this script must grow to answer, so
 # it refuses rather than reporting a wrong answer.
 api="${CRATES_API:-https://crates.io/api/v1/crates}"
+# It reaches curl as a URL, so its shape is checked rather than trusted: an
+# http(s) origin and path, and nothing that could be read as another argument.
+if ! printf '%s' "$api" | grep -Eq '^https?://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$'; then
+  echo "release-probe: CRATES_API is not an http(s) URL: $api" >&2
+  echo "ACTION: unset CRATES_API to use crates.io, or set it to an http(s) registry base" >&2
+  exit 1
+fi
 status=0
 while read -r id; do
   case "$id" in

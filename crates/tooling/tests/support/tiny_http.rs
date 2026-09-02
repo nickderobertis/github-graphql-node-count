@@ -70,9 +70,16 @@ fn answer(mut stream: TcpStream, status: u16, body: &[u8]) {
         }
         line.clear();
     }
-    let reason = if status == 200 { "OK" } else { "Not Found" };
+    // RFC 9112 allows an empty reason phrase, which is the honest answer for a
+    // status this server has never been asked to serve.
+    let reason_phrase = match status {
+        200 => "OK",
+        404 => "Not Found",
+        503 => "Service Unavailable",
+        _ => "",
+    };
     let head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} {reason_phrase}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len(),
     );
     let _ = stream.write_all(head.as_bytes());

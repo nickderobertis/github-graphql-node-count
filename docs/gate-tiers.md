@@ -1,9 +1,9 @@
 # Gate tiers: the measurement behind the decision
 
-`AGENTS.md` records the *decision* — nothing is promoted out of the affected tier
-and nothing is split for speed. This is the measurement it rests on, and how to
-retake it. It lives here rather than in `AGENTS.md` because a dated observation
-from one host is not something every session needs loaded.
+The decision is that nothing is promoted out of the affected tier and nothing is
+split for speed. This is the measurement that decision rests on, and how to retake
+it — a dated observation from one host, which is why it is a document you open
+when you are about to move a target rather than context every session carries.
 
 ## The two tiers
 

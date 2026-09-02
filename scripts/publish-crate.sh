@@ -67,6 +67,10 @@ fi
 # Idempotent: a version already live is skipped, so re-running after a partial
 # failure is safe.
 api="${CRATES_API:-https://crates.io/api/v1/crates}"
+# It reaches curl as a URL, so its shape is checked rather than trusted.
+printf '%s' "$api" | grep -Eq '^https?://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$' ||
+  fail "CRATES_API is not an http(s) URL: $api" \
+    "unset CRATES_API to use crates.io, or set it to an http(s) registry base"
 if curl --silent --fail --max-time 30 "$api/$CRATE/$version" >/dev/null; then
   echo "$CRATE $version is already on crates.io; nothing to do"
   exit 0
@@ -76,4 +80,16 @@ if [ -n "${PUBLISH_DRY_RUN:-}" ]; then
   echo "would publish $CRATE $version from $MANIFEST"
   exit 0
 fi
-cargo publish --locked --manifest-path "$MANIFEST"
+
+# The upload itself is the one step no test can drive: publishing is irreversible,
+# so there is no way to exercise it that does not push a real version to a real
+# registry. Everything it can refuse on is checked above and covered by
+# crates/tooling/tests/publish_crate.rs.
+# llmlint: ignore[changed_behavior_has_e2e] a real `cargo publish` cannot be exercised in a
+# test without irreversibly publishing to crates.io; every refusal that precedes it is driven
+# for real in crates/tooling/tests/publish_crate.rs, and PUBLISH_DRY_RUN covers the path up to
+# this line.
+cargo publish --locked --quiet --manifest-path "$MANIFEST" ||
+  fail "publishing $CRATE $version to crates.io failed" \
+    "read the cargo output above; if the upload partially succeeded, re-running this workflow is safe — an already-live version is skipped"
+echo "published $CRATE $version"

@@ -182,6 +182,11 @@ The allowlist lives in `.claude/settings.json` and the tool enforces it. Keep it
 current and narrow: when a command becomes routine, add it rather than
 re-approving it every session.
 
+Two absences are deliberate. `git add` is not allowlisted — an allowlist cannot
+bound it to the paths a change actually touches, and staging the whole tree is how
+a stray file lands in a commit. Neither is `just nx <anything>`: the escape hatch
+exists, but an arbitrary orchestrator invocation is approved case by case.
+
 ## Suppressions
 
 Fix a finding in the code it names, or suppress it at that site with a stated

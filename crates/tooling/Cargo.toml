@@ -39,3 +39,7 @@ path = "tests/nx_wrapper.rs"
 [[test]]
 name = "install_smoke"
 path = "tests/install_smoke.rs"
+
+[[test]]
+name = "session_provisioners"
+path = "tests/session_provisioners.rs"

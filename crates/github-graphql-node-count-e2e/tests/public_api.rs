@@ -16,16 +16,10 @@ fn no_variables() -> Variables {
     Variables::new()
 }
 
-// -------------------------------------------------------------------------
-// GitHub's two worked examples
-//
-// Transcribed as GitHub publishes them at
-// <https://docs.github.com/en/graphql/overview/rate-limits-and-node-limits-for-the-graphql-api>,
-// with the totals GitHub's own arithmetic states beneath each. The fixture is
-// the document, so a different query reaching the same number does not pass.
-// -------------------------------------------------------------------------
-
-/// GitHub's "simple" worked example.
+/// GitHub's "simple" worked example, transcribed as it is published at
+/// <https://docs.github.com/en/graphql/overview/rate-limits-and-node-limits-for-the-graphql-api>.
+/// The fixture is the document, so a different query reaching the same total does
+/// not pass.
 const GITHUB_SIMPLE_EXAMPLE: &str = r#"
 query {
   viewer {

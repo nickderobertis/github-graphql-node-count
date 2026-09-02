@@ -22,3 +22,13 @@ What each script owes, and why it is covered here rather than by inspection:
   failure, and Nx's stdout untouched for the callers that parse it.
 - `install/smoke.sh` is covered here only for its refusals; its happy path is what
   the `install` CI job runs for real on every change.
+- `session-setup.sh` and `setup-llmlint.sh` run from a `SessionStart` hook, so
+  their one non-negotiable contract is that they **never abort the session that
+  invoked them**: whatever fails, they log it and exit 0. That is exactly what a
+  green run hides, so it is driven here with a hostile environment rather than
+  assumed.
+
+The one thing no test here drives is the real `cargo publish` in
+`scripts/publish-crate.sh`: publishing is irreversible, so exercising it would
+push a version to crates.io. Everything up to that line is covered, and the line
+itself carries a site-scoped suppression saying so.

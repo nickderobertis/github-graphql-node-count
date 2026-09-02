@@ -156,6 +156,77 @@ fn show_output_mode_hands_the_orchestrators_stdout_through_untouched() {
 }
 
 #[test]
+fn a_clean_clone_heals_itself_by_installing_the_pinned_orchestrator() {
+    // The clean-clone path: `node_modules` does not exist yet, so the wrapper runs
+    // a locked install before doing anything. That is what lets `just check` work
+    // from a fresh checkout with no separate "install the orchestrator" step.
+    let workspace = Workspace::with_orchestrator("heal", 0, "Successfully ran target lint");
+    let orchestrator = std::fs::read(workspace.root.join("node_modules/.bin/nx"))
+        .expect("read the orchestrator shim before hiding it");
+    std::fs::remove_dir_all(workspace.root.join("node_modules")).expect("remove node_modules");
+
+    // An `npm` that does what `npm ci` does here: put the orchestrator in place.
+    let bin = workspace.root.join("fake-bin");
+    std::fs::create_dir_all(&bin).expect("create the stand-in bin directory");
+    let npm = bin.join("npm");
+    std::fs::write(
+        &npm,
+        "#!/usr/bin/env bash\nset -eu\nmkdir -p node_modules/.bin\ncp installed-nx node_modules/.bin/nx\nchmod +x node_modules/.bin/nx\necho \"npm $*\" >&2\n",
+    )
+    .expect("write the npm stand-in");
+    make_executable(&npm);
+    std::fs::write(workspace.root.join("installed-nx"), &orchestrator).expect("stage the shim");
+
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let output = workspace.run(&["run-many", "-t", "lint"], &[("PATH", &path)]);
+    assert!(output.status.success(), "{}", stderr_of(&output));
+    assert!(
+        workspace.root.join("node_modules/.bin/nx").is_file(),
+        "the wrapper installed the orchestrator it needed",
+    );
+    assert!(
+        stdout_of(&output).contains("requested targets succeeded"),
+        "{}",
+        stdout_of(&output)
+    );
+    assert!(
+        stderr_of(&output).contains("npm ci"),
+        "it heals with a locked install: {}",
+        stderr_of(&output)
+    );
+}
+
+#[test]
+fn a_failing_install_says_what_to_check_rather_than_command_not_found() {
+    let workspace = Workspace::with_orchestrator("heal-fails", 0, "unused");
+    std::fs::remove_dir_all(workspace.root.join("node_modules")).expect("remove node_modules");
+    let bin = workspace.root.join("fake-bin");
+    std::fs::create_dir_all(&bin).expect("create the stand-in bin directory");
+    let npm = bin.join("npm");
+    std::fs::write(
+        &npm,
+        "#!/usr/bin/env bash\necho 'ENOTFOUND registry.npmjs.org' >&2\nexit 1\n",
+    )
+    .expect("write the failing npm stand-in");
+    make_executable(&npm);
+
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let output = workspace.run(&["run-many", "-t", "lint"], &[("PATH", &path)]);
+    assert!(!output.status.success());
+    let stderr = stderr_of(&output);
+    assert!(stderr.contains("'npm ci' failed"), "{stderr}");
+    assert!(stderr.contains("ACTION:"), "{stderr}");
+}
+
+#[test]
 fn a_workspace_without_the_orchestrator_and_without_npm_says_what_to_install() {
     // The clean-clone path, with the heal impossible: it must name the missing
     // tool rather than failing with `nx: command not found`.

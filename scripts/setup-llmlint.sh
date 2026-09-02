@@ -45,6 +45,13 @@ set -uo pipefail
 # llmlint: ignore[changed_behavior_has_e2e] this dependency floor selects the validator release used by the existing real `just lint-llm-validate` gate; installer control flow and its user-visible contract are unchanged.
 readonly LLMLINT_MIN="0.3.23"
 readonly BIN_DIR="$HOME/.local/bin"
+# Captured before BIN_DIR is prepended below, so persist_session_env can tell
+# whether the session already resolved it. Without this the check below always
+# sees BIN_DIR on PATH — because this script just put it there — and a standalone
+# `just setup-llmlint` would persist nothing, leaving the freshly installed binary
+# unresolvable in every later command. (session-setup.sh does the same; this copy
+# diverges from the create-repo template, which omits it.)
+readonly ORIG_PATH="${PATH}"
 
 log() { printf 'setup-llmlint: %s\n' "$*" >&2; }
 
@@ -69,7 +76,7 @@ ensure_toolchain() {
 persist_session_env() {
   [ -n "${CLAUDE_ENV_FILE:-}" ] || { log "no CLAUDE_ENV_FILE (not a session); skipping env"; return 0; }
   {
-    case ":${PATH}:" in *":${BIN_DIR}:"*) ;; *) printf 'export PATH=%q\n' "${BIN_DIR}:${PATH}";; esac
+    case ":${ORIG_PATH}:" in *":${BIN_DIR}:"*) ;; *) printf 'export PATH=%q\n' "${BIN_DIR}:${PATH}";; esac
     # No ONEHARNESS_* override: oneharness.toml's fallback mode selects the harness
     # (codex primary, claude-code secondary), so a Claude Code session — where codex
     # is absent — falls through to claude-code on its own. Set ONEHARNESS_HARNESSES
