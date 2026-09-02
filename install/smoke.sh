@@ -19,14 +19,20 @@
 #
 # It reaches crates.io to resolve the dependency, so it is not part of `just
 # check`; CI runs it as its own job.
+# Every step that can fail says what to do next: this script's output is the whole
+# of what a failing `install` job tells the next reader.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT" || {
-  echo "install-smoke: cannot enter the repository root $ROOT" >&2
-  echo "ACTION: run this from a checkout whose directories are readable" >&2
+fail() {
+  echo "install-smoke: $1" >&2
+  echo "ACTION: $2" >&2
   exit 1
 }
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" ||
+  fail "cannot enter the repository root $ROOT" \
+    "run this from a checkout whose directories are readable"
 
 readonly CRATE="github-graphql-node-count"
 
@@ -34,42 +40,39 @@ readonly CRATE="github-graphql-node-count"
 # Read rather than restated, so the two cannot drift.
 requirement="$(
   sed -n 's/^'"$CRATE"' *= *"\([^"]*\)".*/\1/p' README.md | head -1
-)"
-[ -n "$requirement" ] || {
-  echo "install-smoke: README.md declares no '$CRATE = \"...\"' dependency line" >&2
-  echo "ACTION: keep the README's install snippet in the documented form, e.g. $CRATE = \"0\"" >&2
-  exit 1
-}
+)" || fail "could not read README.md" "run this from a checkout whose files are readable"
+[ -n "$requirement" ] ||
+  fail "README.md declares no '$CRATE = \"...\"' dependency line" \
+    "keep the README's install snippet in the documented form, e.g. $CRATE = \"0\""
 
 version="$(
   cargo metadata --no-deps --format-version 1 --manifest-path Cargo.toml |
     python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "'"$CRATE"'"))'
-)" || {
-  echo "install-smoke: could not read $CRATE's version from cargo metadata" >&2
-  echo "ACTION: run 'cargo metadata --no-deps' and fix what it reports" >&2
-  exit 1
-}
+)" || fail "could not read $CRATE's version from cargo metadata" \
+  "run 'cargo metadata --no-deps' and fix what it reports"
 
 # `--allow-dirty` so the recipe is usable mid-change; CI's checkout is clean, so
 # there it packages exactly the committed tree.
-if ! cargo package --locked --allow-dirty -p "$CRATE" >/dev/null; then
-  echo "install-smoke: 'cargo package' failed — the crate a consumer would download does not build" >&2
-  echo "ACTION: re-run 'cargo package -p $CRATE' and fix what it reports" >&2
-  exit 1
-fi
+cargo package --locked --allow-dirty -p "$CRATE" >/dev/null ||
+  fail "'cargo package' failed — the crate a consumer would download does not build" \
+    "re-run 'cargo package -p $CRATE' and fix what it reports"
 
 packaged="$ROOT/target/package/$CRATE-$version"
-[ -d "$packaged" ] || {
-  echo "install-smoke: cargo packaged no directory at $packaged" >&2
-  echo "ACTION: check 'cargo package -p $CRATE' output for the path it wrote" >&2
-  exit 1
-}
+[ -d "$packaged" ] ||
+  fail "cargo packaged no directory at $packaged" \
+    "check 'cargo package -p $CRATE' output for the path it wrote"
 
-consumer="$(mktemp -d)"
+consumer="$(mktemp -d)" ||
+  fail "could not create a temporary directory for the consumer project" \
+    "check that TMPDIR is writable and has free space (df -h)"
 trap 'rm -rf "$consumer"' EXIT
 
-mkdir -p "$consumer/src"
-cat >"$consumer/Cargo.toml" <<TOML
+mkdir -p "$consumer/src" ||
+  fail "could not create $consumer/src" \
+    "check that TMPDIR is writable and has free space (df -h)"
+cat >"$consumer/Cargo.toml" <<TOML ||
+  fail "could not write the consumer manifest under $consumer" \
+    "check that TMPDIR is writable and has free space (df -h)"
 [package]
 name = "install-smoke"
 version = "0.0.0"
@@ -83,7 +86,9 @@ $CRATE = { version = "$requirement", path = "$packaged" }
 TOML
 
 # The README's example, verbatim in spirit: what a consumer writes on day one.
-cat >"$consumer/src/main.rs" <<'RUST'
+cat >"$consumer/src/main.rs" <<'RUST' ||
+  fail "could not write the consumer program under $consumer" \
+    "check that TMPDIR is writable and has free space (df -h)"
 use github_graphql_node_count::{node_count, Variables, NODE_LIMIT};
 
 fn main() {
@@ -105,8 +110,6 @@ fn main() {
 }
 RUST
 
-if ! (cd "$consumer" && cargo run --quiet); then
-  echo "install-smoke: a fresh project depending on the packaged $CRATE failed to build or run" >&2
-  echo "ACTION: reproduce in $packaged — the package is what a consumer downloads" >&2
-  exit 1
-fi
+(cd "$consumer" && cargo run --quiet) ||
+  fail "a fresh project depending on the packaged $CRATE failed to build or run" \
+    "reproduce against $packaged — that directory is what a consumer downloads"

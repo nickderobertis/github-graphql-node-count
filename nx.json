@@ -82,6 +82,13 @@
       "inputs": [
         "default"
       ]
+    },
+    "install": {
+      "cache": true,
+      "inputs": [
+        "default",
+        "^default"
+      ]
     }
   }
 }

@@ -42,9 +42,15 @@ as a follow-up.
   its fast tier); `github-graphql-node-count-e2e` (a `publish = false` member with
   no `src/`, taking the crate as an ordinary dependency and driving only its
   public surface); `install-smoke` (the crates.io-reaching install-path suite, its
-  only edge to the published crate, out of the gate's target list); and
-  `release-contract` (tagged `scope:contract`, depending on nothing here so a
-  library change cannot reach it).
+  only edge to the published crate, out of the gate's target list); `tooling`
+  (drives the shell scripts under `scripts/` as subprocesses against real
+  temporary repositories); and `release-contract` (tagged `scope:contract`,
+  depending on nothing here so a library change cannot reach it).
+  Every project carries exactly one `scope:` tag, and `SCOPE_POLICY` in
+  `release-contract`'s suite says what each scope may depend on — Nx's own
+  module-boundary rule is an ESLint rule and there is no JavaScript here, so the
+  boundary is enforced by reading the definitions and manifests that draw the real
+  edges. A new project declares its scope there or fails.
 - **Excluded, and why:**
   - *OS matrix* — pure computation over a `&str`: no I/O, no platform-conditional
     code. One Linux runner proves it; a matrix would triple CI for identical
@@ -143,9 +149,7 @@ a slow suite.
   The tag-triggered publish re-gates nothing.
 - **What this repo publishes** is declared in `release-targets.toml`, and the
   `release-contract` project holds that document to the real release
-  configuration in both directions — and holds the `scope:contract` tag to its
-  meaning, which is the module-boundary rule in the form a Cargo workspace can
-  enforce.
+  configuration in both directions.
 
 ## Invariants (non-negotiable)
 

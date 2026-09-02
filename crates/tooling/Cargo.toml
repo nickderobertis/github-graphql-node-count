@@ -1,0 +1,21 @@
+# Tests for the repository's own shell tooling. The scripts under `scripts/`
+# decide what the gate runs and what a release probe reports, so they are driven
+# as subprocesses against real temporary repositories rather than read. It
+# publishes nothing and depends on nothing in this workspace.
+[package]
+name = "tooling"
+description = "End-to-end tests for this repository's shell tooling. Not published."
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[[test]]
+name = "merge_base"
+path = "tests/merge_base.rs"

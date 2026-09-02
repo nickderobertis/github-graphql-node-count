@@ -152,7 +152,7 @@ msrv:
 # `check` because it resolves dependencies from crates.io; CI runs it as its own
 # job.
 install-smoke:
-    @just nx run install-smoke:install-smoke
+    @just nx run install-smoke:install
 
 # Separate from `check`: `cargo deny` fetches an advisory database, and the gate
 # stays offline. CI runs this as its own job.
