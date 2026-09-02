@@ -1,0 +1,27 @@
+{
+  "name": "release-contract",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "crates/release-contract/tests",
+  "tags": [
+    "scope:contract",
+    "lang:rust"
+  ],
+  "targets": {
+    "format": {
+      "command": "just _crate-format release-contract"
+    },
+    "format-check": {
+      "command": "just _crate-fmt-check release-contract"
+    },
+    "lint": {
+      "command": "just _crate-lint release-contract"
+    },
+    "test": {
+      "command": "just _crate-test release-contract",
+      "inputs": [
+        "releaseConfiguration"
+      ]
+    }
+  }
+}

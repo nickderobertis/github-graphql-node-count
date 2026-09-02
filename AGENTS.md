@@ -99,6 +99,15 @@ I/O, no platform branches, and no error path a test cannot reach: every line is
 coverable, so a floor that tolerated uncovered lines would be declaring the suite
 incomplete.
 
+Two consequences worth knowing before you change the graph. The `test` target is
+**not** Nx-cached: every project's run writes into one shared profile directory,
+so a replayed run would leave the aggregate report measuring a partial set — a
+cache that changed the answer rather than the speed. And the `workspace` project,
+which owns the aggregate, is always in the affected set, because coverage is a
+property of the union rather than of any one project. Both cost seconds here;
+neither is a pattern to copy into a repository with a slow suite without first
+solving the profile-directory sharing.
+
 ## Commits, releases, and merging
 
 - **Squash-merge only, via PR, with auto-merge.** The default branch is
