@@ -176,11 +176,24 @@ jobs:
           just setup-llmlint
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       # setup-llmlint.sh installs llmlint + oneharness only, NOT a harness — so
-      # CI must install one oneharness.toml's fallback list names, else the lint
-      # step skips every file and still passes.
-      - name: Install the coding harness (claude-code)
-        run: npm i -g @anthropic-ai/claude-code
+      # CI must install every harness oneharness.toml's fallback list names, else
+      # the lint step skips every file and still passes. Both are installed
+      # because oneharness only falls through to a harness it can actually spawn:
+      # with codex alone, an exhausted or broken primary has nowhere to degrade
+      # to, and the chain's second entry is a resilience claim the runner cannot
+      # honour. Pinned rather than floating — an upstream release taking a
+      # required check down is a failure mode a sibling repository has already
+      # had. Bump deliberately.
+      - name: Install the Codex harness (oneharness primary)
+        run: npm install -g @openai/codex@0.145.0
+
+      - name: Install the Claude Code harness (oneharness fallback)
+        run: npm install -g @anthropic-ai/claude-code@2.1.220
 
       # Deterministic and model-free: config structure, `llmlint: ignore`
       # directives naming real rules, and fragment version bumps. No credential,
@@ -188,15 +201,31 @@ jobs:
       - name: Validate llmlint config (no model)
         run: just lint-llm-validate --diff-base origin/main
 
+      # Each harness reads its OWN credential from the environment, so the
+      # secrets are exported under the names the binaries look for rather than
+      # under a placeholder — an installed-but-uncredentialled harness is
+      # rejected at auth, oneharness falls through it, and the chain runs out.
+      # That is what took this check down before: the token arrived as
+      # `HARNESS_KEY`, which nothing reads.
       - name: Lint changed files
         env:
-          HARNESS_KEY: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          if [ -z "${HARNESS_KEY:-}" ]; then
-            echo "::error::llmlint needs a harness credential. Add" \
-                 "CLAUDE_CODE_OAUTH_TOKEN under Settings -> Secrets and variables" \
-                 "-> Actions. Fork PRs are gated by the" \
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "::error::llmlint needs OPENAI_API_KEY for the codex harness," \
+                 "oneharness.toml's primary. Add it under Settings -> Secrets and" \
+                 "variables -> Actions. Fork PRs are gated by the" \
                  "require-approval-for-fork-workflows setting." >&2
+            exit 1
+          fi
+          # The fallback is only real if its credential arrived too: without it an
+          # exhausted codex degrades to a claude-code that fails at auth, and the
+          # chain has nowhere left to go.
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            echo "::error::llmlint needs CLAUDE_CODE_OAUTH_TOKEN for the" \
+                 "claude-code fallback harness. Add it under Settings -> Secrets" \
+                 "and variables -> Actions." >&2
             exit 1
           fi
           just lint-llm-diff origin/main
