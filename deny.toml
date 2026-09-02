@@ -1,0 +1,32 @@
+# Supply-chain policy, run by `just deps-check` and the `deps` CI job. It is a
+# default gate rather than a "when you distribute" extra: this crate is published,
+# so its dependency tree is its consumers' dependency tree.
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licences only. This crate is MIT, and a copyleft dependency would
+# change what a consumer may do with it.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

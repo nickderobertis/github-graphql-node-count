@@ -1,0 +1,32 @@
+{
+  "name": "tooling",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "crates/tooling/tests",
+  "tags": [
+    "scope:tooling",
+    "lang:rust"
+  ],
+  "targets": {
+    "format": {
+      "command": "just _crate-format tooling"
+    },
+    "format-check": {
+      "command": "just _crate-fmt-check tooling"
+    },
+    "lint": {
+      "command": "just _crate-lint tooling"
+    },
+    "build": {
+      "command": "just _crate-build tooling"
+    },
+    "test": {
+      "command": "just _crate-test tooling",
+      "inputs": [
+        "default",
+        "{workspaceRoot}/scripts/**/*",
+        "{workspaceRoot}/install/**/*"
+      ]
+    }
+  }
+}

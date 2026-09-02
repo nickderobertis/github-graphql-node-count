@@ -1,0 +1,19 @@
+{
+  "name": "workspace",
+  "$schema": "./node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": [
+    "scope:repo"
+  ],
+  "targets": {
+    "coverage": {
+      "command": "just _coverage-report",
+      "dependsOn": [
+        {
+          "projects": "tag:lang:rust",
+          "target": "test"
+        }
+      ]
+    }
+  }
+}

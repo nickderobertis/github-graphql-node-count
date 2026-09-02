@@ -1,0 +1,231 @@
+# Prove the crate from a clean checkout: bootstrap, then the gate.
+#
+# Both gate runs go through the same `just check` recipe, so local and CI cannot
+# drift; the tier is a flag on it:
+#
+#   * an ordinary pull request runs the AFFECTED tier — the projects the diff can
+#     reach, keyed off an explicitly derived merge base;
+#   * the release PR runs the BROADER tier — one full sweep over every project.
+#     This repository batches releases behind a release-plz release PR, so the
+#     commit that ships is one no merge job swept; release-prep is where the sweep
+#     belongs, and merge-to-main stays on the affected tier. See "Commits,
+#     releases, and merging" in AGENTS.md.
+#
+# Both are the `check` job, so there is one required context whichever tier it
+# ran. Nothing downstream re-gates: the tag-triggered release.yml builds and
+# publishes an already-swept commit.
+#
+# The required set on the protected default branch is exactly the jobs below that
+# verify a change — `check`, `deps`, `msrv`, `install`, `commitlint` and
+# `llmlint`. A job renamed here moves those contexts, the
+# setup_github_governance.py invocation, and AGENTS.md together.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: read-only by default, widened per job only where needed.
+permissions:
+  contents: read
+
+jobs:
+  # The gate. One Linux runner: the crate is pure computation over a `&str` with
+  # no I/O and no platform-conditional code, so a matrix would triple CI for
+  # identical arithmetic (recorded in AGENTS.md under "Excluded, and why").
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: affected detection resolves the merge base from it, and a
+      # shallow checkout would make that base non-deterministic.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-nextest,cargo-llvm-cov
+
+      - name: Bootstrap
+        run: just bootstrap
+
+      # The release PR is release-prep: it ships a commit no merge job swept, so
+      # it is the one place the broader tier runs. `github.head_ref` is empty on a
+      # push, which selects the affected tier there.
+      - name: Choose the tier
+        id: tier
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: echo "tier=$(./scripts/gate-tier.sh "$HEAD_REF")" >> "$GITHUB_OUTPUT"
+
+      - name: Check
+        env:
+          TIER: ${{ steps.tier.outputs.tier }}
+        run: just check "$TIER"
+
+  # Supply chain: advisories, the licence allow-list, banned and unvetted
+  # sources, and unused dependencies. Its own job because `cargo deny` fetches an
+  # advisory database, and `just check` stays offline.
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny,cargo-machete
+
+      - name: Install the pinned toolchain
+        run: just toolchain
+
+      - name: Advisory, licence and unused-dependency audit
+        run: just deps-check
+
+  # The declared minimum supported Rust version, built for real. `rust-version` in
+  # Cargo.toml is a promise to consumers — cargo refuses the crate on an older
+  # compiler — so it is checked rather than documented.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build under the declared MSRV
+        run: just msrv
+
+  # The end-user install path: `cargo add`. Deliberately separate from the dev
+  # gate — `just bootstrap` sets up a contributor's environment, this packages the
+  # crate as `cargo publish` would and builds the README's example against that
+  # package in a project of its own.
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install the pinned toolchain
+        run: just toolchain
+
+      - name: Install the crate the way a consumer does, and run it
+        run: just install-smoke
+
+  # The PR title becomes the squash commit release-plz reads, so a malformed one
+  # must not merge. Required, alongside the gate.
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # LLM-judge tier — a blocking PR check, SEPARATE from the `check` gate. It is
+  # non-deterministic and needs an authenticated harness, so it never runs inside
+  # `just check`. Scoped to the merge-base diff so a PR pays for its own changes.
+  # It REQUIRES the harness credential and fails fast without it; it never no-ops
+  # to green, which would report unlinted files as clean. Fork PRs are handled at
+  # the repository level (Settings -> Actions -> General -> Fork pull request
+  # workflows -> Require approval), not by a no-op branch here.
+  llmlint:
+    if: github.event_name == 'pull_request' && github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch main (diff base)
+        run: git fetch --no-tags --depth=2147483647 origin main
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      # setup-llmlint.sh installs llmlint from PyPI with `uv tool`, and this is
+      # a Rust repository — nothing else here provisions uv, and the runner image
+      # does not ship it. The script treats a missing uv as a session-startup
+      # nuisance and exits 0 after logging a pointer, which in CI means the next
+      # step is the first to notice. Provision it here so it never has to.
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install oneharness + llmlint
+        run: |
+          just setup-llmlint
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # setup-llmlint.sh installs llmlint + oneharness only, NOT a harness — so
+      # CI must install every harness oneharness.toml's fallback list names, else
+      # the lint step skips every file and still passes. Both are installed
+      # because oneharness only falls through to a harness it can actually spawn:
+      # with codex alone, an exhausted or broken primary has nowhere to degrade
+      # to, and the chain's second entry is a resilience claim the runner cannot
+      # honour. Pinned rather than floating — an upstream release taking a
+      # required check down is a failure mode a sibling repository has already
+      # had. Bump deliberately.
+      - name: Install the Codex harness (oneharness primary)
+        run: npm install -g @openai/codex@0.145.0
+
+      - name: Install the Claude Code harness (oneharness fallback)
+        run: npm install -g @anthropic-ai/claude-code@2.1.220
+
+      # Deterministic and model-free: config structure, `llmlint: ignore`
+      # directives naming real rules, and fragment version bumps. No credential,
+      # so it runs before the paid model tier and fails fast on a config slip.
+      - name: Validate llmlint config (no model)
+        run: just lint-llm-validate --diff-base origin/main
+
+      # Each harness reads its OWN credential from the environment, so the
+      # secrets are exported under the names the binaries look for rather than
+      # under a placeholder — an installed-but-uncredentialled harness is
+      # rejected at auth, oneharness falls through it, and the chain runs out.
+      # That is what took this check down before: the token arrived as
+      # `HARNESS_KEY`, which nothing reads.
+      - name: Lint changed files
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "::error::llmlint needs OPENAI_API_KEY for the codex harness," \
+                 "oneharness.toml's primary. Add it under Settings -> Secrets and" \
+                 "variables -> Actions. Fork PRs are gated by the" \
+                 "require-approval-for-fork-workflows setting." >&2
+            exit 1
+          fi
+          # The fallback is only real if its credential arrived too: without it an
+          # exhausted codex degrades to a claude-code that fails at auth, and the
+          # chain has nowhere left to go.
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            echo "::error::llmlint needs CLAUDE_CODE_OAUTH_TOKEN for the" \
+                 "claude-code fallback harness. Add it under Settings -> Secrets" \
+                 "and variables -> Actions." >&2
+            exit 1
+          fi
+          just lint-llm-diff origin/main

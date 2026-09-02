@@ -1,0 +1,18 @@
+[package]
+name = "github-graphql-node-count"
+description = "Compute the worst-case node count GitHub's GraphQL API attributes to a query, offline, from the query text and its page-size variables."
+keywords = ["github", "graphql", "rate-limit", "node-count", "static-analysis"]
+categories = ["development-tools", "parsing"]
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+graphql-parser = { workspace = true }

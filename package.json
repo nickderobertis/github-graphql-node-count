@@ -1,0 +1,9 @@
+{
+  "name": "github-graphql-node-count-workspace",
+  "private": true,
+  "description": "Nx project graph for the github-graphql-node-count repository. Not published; it carries the orchestrator and nothing else. The crate's version comes from Cargo.toml.",
+  "license": "MIT",
+  "devDependencies": {
+    "nx": "^23.1.1"
+  }
+}

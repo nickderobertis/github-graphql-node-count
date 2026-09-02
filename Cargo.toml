@@ -1,0 +1,37 @@
+# Virtual workspace manifest. One `Cargo.lock` for the repository; Nx runs the
+# targets, Cargo resolves the dependencies, and both describe the same projects —
+# each crate directory holds its own `Cargo.toml` beside its own `project.json`.
+[workspace]
+resolver = "2"
+members = [
+    "crates/github-graphql-node-count",
+    "crates/github-graphql-node-count-e2e",
+    "crates/release-contract",
+    "crates/tooling",
+]
+
+# Shared metadata every member inherits, so one logical version spans every
+# manifest and release-plz has a single number to write.
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+# The oldest toolchain this crate is known to build on, verified by `just msrv`
+# and enforced continuously by clippy (clippy.toml). It is a promise to
+# consumers, so raise it deliberately.
+rust-version = "1.86"
+license = "MIT"
+repository = "https://github.com/nickderobertis/github-graphql-node-count"
+authors = ["Nick DeRobertis <derobertis.nick@gmail.com>"]
+
+# Warnings are errors for this workspace's own crates, in `build`, `test`, `doc`
+# and the coverage run alike. Declared here rather than through RUSTFLAGS, which
+# would impose it on dependencies too.
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.dependencies]
+github-graphql-node-count = { path = "crates/github-graphql-node-count", version = "0.0.0" }
+graphql-parser = "0.4.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"

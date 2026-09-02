@@ -1,3 +1,10 @@
 # Local sync bookkeeping for gh-secrets (per-machine; the manifest itself is
 # tracked)
 .gh-secrets-state.json
+
+/target
+# Nx + Node (the orchestrator's toolchain; package-lock.json is tracked)
+/node_modules
+/.nx
+/target/llvm-cov-target
+.logs/

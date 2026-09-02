@@ -1,0 +1,33 @@
+{
+  "name": "github-graphql-node-count",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "crates/github-graphql-node-count/src",
+  "tags": [
+    "scope:library",
+    "lang:rust"
+  ],
+  "targets": {
+    "bootstrap": {
+      "command": "just _cargo-bootstrap"
+    },
+    "format": {
+      "command": "just _crate-format github-graphql-node-count"
+    },
+    "format-check": {
+      "command": "just _crate-fmt-check github-graphql-node-count"
+    },
+    "lint": {
+      "command": "just _crate-lint github-graphql-node-count"
+    },
+    "build": {
+      "command": "just _crate-build github-graphql-node-count"
+    },
+    "doc": {
+      "command": "just _crate-doc github-graphql-node-count"
+    },
+    "test": {
+      "command": "just _crate-test github-graphql-node-count"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+# What this repository publishes, and the name each registry serves it under.
+#
+# This is a contract with the repositories that wait on this one: a dependent
+# names a target's short `name` in order to wait for this crate's release. The
+# `release-contract` project reconciles this document against the *real* release
+# configuration — .github/workflows/release.yml and the crate manifests — in both
+# directions, so a name this repository starts or stops publishing fails the gate
+# rather than going undeclared.
+#
+# **The registry qualification in `id` is load-bearing rather than decorative.**
+# It is `<registry>:<name>`, where the name is exactly the name that registry
+# serves. This repository serves one artifact from one registry today, so the
+# qualification buys nothing yet — but a consumer reads every producer's document
+# with one reader, and an unqualified id is ambiguous the moment a second registry
+# appears.
+
+# `3` is the shape a producer writes today. Nothing here uses a key version 1
+# lacks — no scoped `@scope/name` identifier (version 2) and no per-target
+# `adoption_instructions` (version 3) — so a consumer still reading version 1
+# reads this document as the shape it already knows.
+schema_version = 3
+
+# What a public registry currently serves for one `id` below. It reads those ids
+# back out of this document, so there is one list rather than two to drift apart.
+probe = "scripts/release-probe.sh"
+
+# The only deliverable. `release-plz` writes its version; the tag that merge
+# creates triggers the crates.io publish.
+[[target]]
+id = "crate:github-graphql-node-count"
+name = "crate"
+what = "The node-count library, as a Rust dependent takes it with `cargo add github-graphql-node-count`."
+published_by = ".github/workflows/release.yml — the `publish-crate` job, through scripts/publish-crate.sh, under crates/github-graphql-node-count/Cargo.toml's [package] name."
+manifest = "crates/github-graphql-node-count/Cargo.toml"
+
+# Entries of neither kind: `github-graphql-node-count-e2e` and `release-contract`
+# carry `publish = false` and reach no registry, and this repository ships no
+# binary and no GitHub Release archive. No `[[retired]]` — nothing published here
+# has been withdrawn.

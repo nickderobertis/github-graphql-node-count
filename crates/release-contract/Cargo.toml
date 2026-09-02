@@ -1,0 +1,25 @@
+# Holds `release-targets.toml` to what this repository actually publishes. It
+# depends on nothing in this workspace on purpose: a change to the library must
+# not reach this suite, and this suite must not reach back into its consumers.
+[package]
+name = "release-contract"
+description = "Reconciles release-targets.toml against the real release configuration. Not published."
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+[[test]]
+name = "release_targets"
+path = "tests/release_targets.rs"

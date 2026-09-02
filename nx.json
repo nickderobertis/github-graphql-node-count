@@ -1,0 +1,95 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultBase": "main",
+  "cacheDirectory": ".nx/cache",
+  "namedInputs": {
+    "sharedGlobals": [
+      "{workspaceRoot}/nx.json",
+      "{workspaceRoot}/package.json",
+      "{workspaceRoot}/package-lock.json",
+      "{workspaceRoot}/justfile",
+      "{workspaceRoot}/rust-toolchain.toml",
+      "{workspaceRoot}/rustfmt.toml",
+      "{workspaceRoot}/clippy.toml",
+      "{workspaceRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.lock"
+    ],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
+    "wholeWorkspace": [
+      "{workspaceRoot}/**/*"
+    ],
+    "releaseConfiguration": [
+      "{projectRoot}/**/*",
+      "{workspaceRoot}/release-targets.toml",
+      "{workspaceRoot}/release-plz.toml",
+      "{workspaceRoot}/scripts/publish-crate.sh",
+      "{workspaceRoot}/scripts/release-probe.sh",
+      "{workspaceRoot}/.github/workflows/release.yml",
+      "{workspaceRoot}/.github/workflows/release-plz.yml",
+      "sharedGlobals"
+    ]
+  },
+  "targetDefaults": {
+    "bootstrap": {
+      "cache": false
+    },
+    "format": {
+      "cache": false
+    },
+    "format-check": {
+      "cache": true,
+      "inputs": [
+        "default"
+      ]
+    },
+    "lint": {
+      "cache": true,
+      "inputs": [
+        "default"
+      ]
+    },
+    "doc": {
+      "cache": true,
+      "inputs": [
+        "default"
+      ]
+    },
+    "test": {
+      "cache": true,
+      "inputs": [
+        "default"
+      ],
+      "outputs": [
+        "{workspaceRoot}/target/llvm-cov-target"
+      ]
+    },
+    "coverage": {
+      "cache": false
+    },
+    "lint-llm-diff": {
+      "cache": true,
+      "inputs": [
+        "wholeWorkspace",
+        {
+          "env": "LLMLINT_DIFF_BASE_SHA"
+        }
+      ]
+    },
+    "build": {
+      "cache": true,
+      "inputs": [
+        "default"
+      ]
+    },
+    "install": {
+      "cache": true,
+      "inputs": [
+        "default",
+        "^default"
+      ]
+    }
+  }
+}
