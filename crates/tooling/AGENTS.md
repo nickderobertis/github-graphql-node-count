@@ -28,6 +28,12 @@ What each script owes, and why it is covered here rather than by inspection:
   green run hides, so it is driven here with a hostile environment rather than
   assumed.
 
+The provisioner tests run with a `PATH` that carries stand-ins plus `/usr/bin` and
+`/bin` and **nothing else** — in particular not the directories the real `just`,
+`uv` and `llmlint` live in, so a test asking for one of them absent really gets it.
+Keep it that way: adding the developer's own `PATH` back would make several of
+these pass for the wrong reason.
+
 The one thing no test here drives is the real `cargo publish` in
 `scripts/publish-crate.sh`: publishing is irreversible, so exercising it would
 push a version to crates.io. Everything up to that line is covered, and the line

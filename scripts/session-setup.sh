@@ -23,8 +23,9 @@
 # llmlint: ignore-file[tool_output_is_signal, boundary_inputs_validated] deliberate for a session-startup installer (see header): success stays quiet while failures log-and-continue rather than block startup, because a flaky install must never abort session startup; and `just` is installed from PyPI (`uv tool install rust-just`) whose wheels ship with Trusted Publishing + PEP 740 attestations, so no unvalidated external input is executed.
 set -uo pipefail
 
-# `just` floor — keep in lockstep with your `.tool-versions` pin. `rust-just` is
-# the PyPI package that ships the `just` binary.
+# `just` floor. This repository pins no `just` version anywhere else — the
+# toolchain it does pin is Rust's, in rust-toolchain.toml — so this is the only
+# declaration. `rust-just` is the PyPI package that ships the `just` binary.
 readonly JUST_MIN="1.51.0"
 readonly BIN_DIR="$HOME/.local/bin"
 # Capture the inherited PATH before we prepend BIN_DIR, so persist_session_env can
@@ -83,10 +84,17 @@ ensure_just
 verify_prereqs
 persist_session_env
 
-# Hand off to the optional llmlint-tier installer beside this script, if present.
+# Hand off to the llmlint-tier installer. Through the documented command surface
+# when `just` resolves — which is the normal case, since ensure_just ran above —
+# and directly otherwise, because the whole reason this hook exists is that a
+# fresh session may not have `just` yet, and a failed provision must not turn into
+# a skipped llmlint setup.
 setup_llmlint="$(dirname "$0")/setup-llmlint.sh"
-if [ -x "$setup_llmlint" ]; then
-  log "running setup-llmlint.sh"
+if command -v just >/dev/null 2>&1; then
+  log "running just setup-llmlint"
+  just setup-llmlint || log "just setup-llmlint reported an issue (continuing)"
+elif [ -x "$setup_llmlint" ]; then
+  log "just unavailable; running setup-llmlint.sh directly"
   "$setup_llmlint" || log "setup-llmlint.sh reported an issue (continuing)"
 fi
 

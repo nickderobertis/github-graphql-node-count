@@ -40,21 +40,31 @@ tag="${1-}"
     "add it under Settings -> Secrets and variables -> Actions"
 
 # The tag arrives from the push event, so its shape is validated rather than
-# trusted before any part of it reaches a URL or a comparison.
-version="${tag#v}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] ||
+# trusted before any part of it reaches a URL or a comparison. The whole tag is
+# matched, `v` included: stripping the prefix first would let a bare `1.2.3`
+# through, and that is not a tag release-plz cuts.
+[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] ||
   fail "tag '$tag' is not vX.Y.Z; refusing to publish" \
     "tag releases as vX.Y.Z — release-plz does this, so an odd tag means a hand-made one"
+version="${tag#v}"
 
+[ -r "$MANIFEST" ] ||
+  fail "cannot read $MANIFEST" \
+    "run this from a checkout whose files are readable"
 manifest_version="$(
   sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$MANIFEST" | head -1
-)"
+)" || fail "could not read a version from $MANIFEST" \
+  "check that the manifest is well-formed TOML"
 if [ -z "$manifest_version" ]; then
   # The crate inherits its version from [workspace.package], which is the shape
   # release-plz writes.
+  [ -r Cargo.toml ] ||
+    fail "cannot read the workspace manifest Cargo.toml" \
+      "run this from a checkout whose files are readable"
   manifest_version="$(
     sed -n '/^\[workspace\.package\]/,/^\[/ s/^version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -1
-  )"
+  )" || fail "could not read a version from [workspace.package]" \
+    "check that the workspace manifest is well-formed TOML"
 fi
 [ -n "$manifest_version" ] ||
   fail "could not read $CRATE's version from $MANIFEST or [workspace.package]" \

@@ -188,6 +188,42 @@ fn an_identifier_that_does_not_name_a_package_is_refused_before_it_reaches_a_url
 }
 
 #[test]
+fn a_registry_base_that_is_not_an_http_url_is_refused() {
+    let checkout = Checkout::with_ids("bad-api", &["crate:github-graphql-node-count"]);
+
+    let output = checkout.run("file:///etc/passwd");
+    assert!(
+        !output.status.success(),
+        "a non-http registry base must not reach curl"
+    );
+    let stderr = stderr_of(&output);
+    assert!(
+        stderr.contains("CRATES_API is not an http(s) URL"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("ACTION:"), "{stderr}");
+}
+
+#[test]
+fn a_declaration_naming_no_targets_is_a_failure_rather_than_a_silent_success() {
+    // Reading the ids inside a process substitution swallowed the read's own
+    // outcome, so "nothing to report" and "could not read it" looked the same.
+    let checkout = Checkout::with_ids("no-targets", &[]);
+
+    let output = checkout.run("http://127.0.0.1:1/crates");
+    assert!(
+        !output.status.success(),
+        "no targets is not a successful probe"
+    );
+    assert!(stdout_of(&output).is_empty(), "{}", stdout_of(&output));
+    assert!(
+        stderr_of(&output).contains("declares no release targets"),
+        "{}",
+        stderr_of(&output)
+    );
+}
+
+#[test]
 fn a_missing_declaration_says_what_to_do() {
     let checkout = Checkout::with_ids("missing", &[]);
     std::fs::remove_file(checkout.root.join("release-targets.toml")).expect("remove the toml");

@@ -67,6 +67,108 @@ fn a_tag_that_is_not_a_version_is_refused() {
 }
 
 #[test]
+fn a_bare_version_with_no_v_prefix_is_refused() {
+    // `${tag#v}` leaves a bare `1.2.3` unchanged, so validating the *stripped*
+    // string would accept a tag release-plz never cuts. The whole tag is matched.
+    let output = run(&workspace_version(), &[("CARGO_REGISTRY_TOKEN", "x")]);
+    assert!(
+        !output.status.success(),
+        "a tag without the `v` prefix must not publish"
+    );
+    assert!(
+        stderr_of(&output).contains("is not vX.Y.Z"),
+        "{}",
+        stderr_of(&output)
+    );
+}
+
+#[test]
+fn a_registry_base_that_is_not_an_http_url_is_refused() {
+    // It reaches curl as a URL, so its shape is checked before the script would
+    // otherwise hand curl something that could be read as another argument.
+    let output = run(
+        &format!("v{}", workspace_version()),
+        &[
+            ("CARGO_REGISTRY_TOKEN", "x"),
+            ("CRATES_API", "file:///etc/passwd"),
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "a non-http registry base must not be used"
+    );
+    let stderr = stderr_of(&output);
+    assert!(
+        stderr.contains("CRATES_API is not an http(s) URL"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("ACTION:"), "{stderr}");
+}
+
+#[test]
+fn an_unreadable_manifest_is_reported_rather_than_dying_on_a_raw_read_error() {
+    // The read happens under `set -e`, so without an explicit guard the script
+    // would exit through the command substitution before saying anything useful.
+    let scratch = Scratch::new("no-manifest");
+    let output = scratch.run(
+        &format!("v{}", workspace_version()),
+        &[("CARGO_REGISTRY_TOKEN", "x")],
+    );
+    assert!(!output.status.success());
+    let stderr = stderr_of(&output);
+    assert!(stderr.contains("cannot read"), "{stderr}");
+    assert!(
+        stderr.contains("ACTION:"),
+        "a refusal says what to do next: {stderr}"
+    );
+}
+
+/// A checkout holding only the script, so the manifest it wants is absent.
+struct Scratch {
+    root: PathBuf,
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+impl Scratch {
+    fn new(label: &str) -> Self {
+        let root = std::env::temp_dir().join(format!(
+            "publish-crate-{label}-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        ));
+        std::fs::create_dir_all(root.join("scripts")).expect("create the scratch tree");
+        std::fs::copy(
+            repo_root().join("scripts/publish-crate.sh"),
+            root.join("scripts/publish-crate.sh"),
+        )
+        .expect("copy the script");
+        Self { root }
+    }
+
+    fn run(&self, tag: &str, env: &[(&str, &str)]) -> Output {
+        let mut command = Command::new("bash");
+        command
+            .arg("scripts/publish-crate.sh")
+            .arg(tag)
+            .current_dir(&self.root)
+            .env("CRATES_API", UNROUTABLE_REGISTRY)
+            .env_remove("CARGO_REGISTRY_TOKEN");
+        for (key, value) in env {
+            command.env(key, value);
+        }
+        command.output().expect("run publish-crate.sh")
+    }
+}
+
+#[test]
 fn a_tag_naming_a_version_the_manifest_does_not_is_refused() {
     // The case that matters: a hand-made tag would publish a version nobody
     // reviewed, under a number the changelog does not describe.

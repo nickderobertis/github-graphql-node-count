@@ -156,6 +156,52 @@ fn show_output_mode_hands_the_orchestrators_stdout_through_untouched() {
 }
 
 #[test]
+fn the_windows_shim_is_used_when_the_unix_one_is_absent() {
+    // npm writes `nx.cmd` on Windows and `nx` elsewhere; the wrapper takes
+    // whichever exists, so a Windows checkout is not a different code path to
+    // discover at the worst moment.
+    let workspace = Workspace::with_orchestrator("cmd-shim", 0, "Successfully ran target lint");
+    let bin = workspace.root.join("node_modules/.bin");
+    std::fs::rename(bin.join("nx"), bin.join("nx.cmd")).expect("leave only the .cmd shim");
+
+    let output = workspace.run(&["run-many", "-t", "lint"], &[]);
+    assert!(output.status.success(), "{}", stderr_of(&output));
+    assert!(
+        stdout_of(&output).contains("requested targets succeeded"),
+        "{}",
+        stdout_of(&output)
+    );
+    assert!(
+        workspace.log().contains("args: run-many -t lint"),
+        "{}",
+        workspace.log()
+    );
+}
+
+#[test]
+fn show_output_mode_carries_a_failure_out_rather_than_swallowing_it() {
+    // Streaming mode `exec`s the orchestrator, so its exit status is the
+    // wrapper's. A caller parsing stdout must still learn that the run failed.
+    let workspace = Workspace::with_orchestrator("stream-fail", 3, "boom");
+
+    let output = workspace.run(&["show", "projects"], &[("NODE_COUNT_NX_SHOW_OUTPUT", "1")]);
+    assert!(
+        !output.status.success(),
+        "a failing orchestrator must fail the wrapper"
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "the orchestrator's exit status is carried out"
+    );
+    assert!(
+        stdout_of(&output).contains("boom"),
+        "streams are handed through: {}",
+        stdout_of(&output)
+    );
+}
+
+#[test]
 fn a_clean_clone_heals_itself_by_installing_the_pinned_orchestrator() {
     // The clean-clone path: `node_modules` does not exist yet, so the wrapper runs
     // a locked install before doing anything. That is what lets `just check` work

@@ -33,6 +33,17 @@ if ! printf '%s' "$api" | grep -Eq '^https?://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$'
   echo "ACTION: unset CRATES_API to use crates.io, or set it to an http(s) registry base" >&2
   exit 1
 fi
+ids="$(sed -n 's/^id *= *"\([^"]*\)".*/\1/p' "$declaration")" || {
+  echo "release-probe: could not read $declaration" >&2
+  echo "ACTION: check that it is readable and well-formed TOML" >&2
+  exit 1
+}
+if [ -z "$ids" ]; then
+  echo "release-probe: $declaration declares no release targets" >&2
+  echo "ACTION: add a [[target]] with an id, or stop calling the probe" >&2
+  exit 1
+fi
+
 status=0
 while read -r id; do
   case "$id" in
@@ -93,6 +104,6 @@ while read -r id; do
     continue
   fi
   printf '%s %s\n' "$id" "$version"
-done < <(sed -n 's/^id *= *"\([^"]*\)".*/\1/p' "$declaration")
+done <<<"$ids"
 
 exit "$status"

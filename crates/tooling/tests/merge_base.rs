@@ -46,6 +46,20 @@ impl Checkout {
         checkout
     }
 
+    /// Run git, returning its stdout, and allowing a non-zero exit — for the
+    /// queries whose "not found" answer is the point.
+    fn git_allowing_failure(&self, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(&self.root)
+            .output()
+            .unwrap_or_else(|error| panic!("git {args:?}: {error}"));
+        String::from_utf8(output.stdout)
+            .expect("git speaks utf-8")
+            .trim()
+            .to_string()
+    }
+
     fn git(&self, args: &[&str]) -> String {
         let output = Command::new("git")
             .args(args)
@@ -150,6 +164,43 @@ fn an_explicit_base_ref_overrides_the_branch_the_environment_names() {
         ("NODE_COUNT_NX_BASE_REF", "main"),
     ]);
     assert_eq!(stdout, fork_point);
+}
+
+#[test]
+fn a_pull_request_build_fetches_a_base_ref_the_checkout_does_not_have() {
+    // The shallow-checkout case that *is* recoverable: the base branch exists on
+    // the remote but has no remote-tracking ref here. The script fetches it, so
+    // detection does not depend on how deep the checkout happened to be.
+    let origin = Checkout::new("pr-origin");
+    let fork_point = origin.git(&["rev-parse", "HEAD"]);
+
+    let checkout = Checkout::new("pr-fetch");
+    checkout.git(&[
+        "remote",
+        "add",
+        "origin",
+        &origin.root.display().to_string(),
+    ]);
+    // Take the origin's history without any remote-tracking ref for `main`.
+    checkout.git(&["fetch", "--quiet", "origin", "main"]);
+    checkout.git(&["reset", "--hard", "--quiet", &fork_point]);
+    checkout.git(&["update-ref", "-d", "refs/remotes/origin/main"]);
+    assert!(
+        checkout
+            .git_allowing_failure(&[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "refs/remotes/origin/main"
+            ])
+            .is_empty(),
+        "the base ref is genuinely absent before the run",
+    );
+    checkout.git(&["checkout", "--quiet", "-b", "feature"]);
+    checkout.commit("second");
+
+    let (stdout, stderr) = checkout.run(&[("CI", "1"), ("GITHUB_BASE_REF", "main")]);
+    assert_eq!(stdout, fork_point, "stderr was: {stderr}");
 }
 
 #[test]
