@@ -149,14 +149,9 @@ impl Totals {
 /// aggregate within 50 of `u64::MAX` cannot overflow the addition, and in
 /// integers rather than through an `f64` because a float round is a needless way
 /// to be subtly wrong about a value this one is compared against.
-// llmlint: ignore[contracts_have_one_source_or_a_drift_gate] every rule this crate
-// implements is GitHub's and restated by hand — PAGE_SIZE_RANGE and NODE_LIMIT no less than
-// this formula — because the crate reaching a network or a credential to reconcile against
-// its source is the one thing AGENTS.md forbids outright, and a live `rateLimit(dryRun:
-// true)` oracle tier was considered and excluded there by name. What stands in for the gate
-// is the same thing it does for the node count: GitHub's published worked example, whose
-// document text and both figures (5,101 requests scoring 51 points) are pinned in
-// `github-graphql-node-count-e2e`, so a formula that stopped matching the source fails there.
+// llmlint: ignore[contracts_have_one_source_or_a_drift_gate] a gate reconciling this against
+// GitHub would need the network and credential AGENTS.md forbids the crate outright; its
+// published worked example, pinned in the e2e suite, is what stands in.
 pub(crate) fn points(aggregate: u64) -> u64 {
     let rounded = aggregate / 100 + u64::from(aggregate % 100 >= 50);
     rounded.max(POINT_MINIMUM)
@@ -246,7 +241,6 @@ impl<'a> Counter<'a> {
             nodes,
             aggregate: multiplier,
         };
-        // Descend with `nodes`, the same multiplier either answer nests against.
         let nested = self.selection_set(&field.selection_set, nodes)?;
         checked(own.checked_add(nested), label)
     }
