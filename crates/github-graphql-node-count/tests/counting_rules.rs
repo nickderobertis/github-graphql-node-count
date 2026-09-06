@@ -300,6 +300,25 @@ query {
 /// The larger of the two page sizes, 30.
 const BOTH_FIRST_AND_LAST_NODES: u64 = 30;
 
+/// The same invalid connection with something nested under it, so the page size
+/// the crate chose is visible in what the child costs rather than only in the
+/// parent's own nodes.
+const BOTH_FIRST_AND_LAST_NESTED: &str = r#"
+query {
+  viewer {
+    repositories(first: 3, last: 30) {
+      edges { node { issues(first: 5) { edges { node { title } } } } }
+    }
+  }
+}
+"#;
+
+/// 30 repositories + 30 x 5 = 150 repository issues.
+const BOTH_FIRST_AND_LAST_NESTED_NODES: u64 = 180;
+/// 1 repositories request + 30 issues requests, one per repository — the larger
+/// page size, so the price stays a worst case too.
+const BOTH_FIRST_AND_LAST_NESTED_AGGREGATE: u64 = 31;
+
 #[test]
 fn a_field_supplying_both_first_and_last_takes_the_larger() {
     assert_eq!(
@@ -731,4 +750,75 @@ fn a_page_size_variable_moves_the_aggregate_the_way_it_moves_the_multiplier() {
         // Every one of these is under a point, so all three cost the minimum.
         assert_eq!(point_cost(VARIABLE_SPENT_TWICE, &variables), Ok(1));
     }
+}
+
+#[test]
+fn an_inline_fragments_connections_are_aggregated_against_its_parent() {
+    // An inline fragment adds no level of its own, so the `comments` reached
+    // through two of them is resolved once per timeline item: 1 + 10 requests.
+    assert_eq!(
+        point_aggregate(INLINE_FRAGMENT_UNION, &no_variables()),
+        Ok(11)
+    );
+    assert_eq!(point_cost(INLINE_FRAGMENT_UNION, &no_variables()), Ok(1));
+}
+
+#[test]
+fn a_mutation_and_a_subscription_are_priced_like_a_query() {
+    // The payload of a mutation reads one connection, resolved once.
+    assert_eq!(point_aggregate(MUTATION_OPERATION, &no_variables()), Ok(1));
+    assert_eq!(point_cost(MUTATION_OPERATION, &no_variables()), Ok(1));
+
+    // And a subscription, which GitHub's schema has no root for today but the
+    // grammar admits, is answered rather than refused.
+    assert_eq!(
+        point_aggregate(SUBSCRIPTION_OPERATION, &no_variables()),
+        Ok(1)
+    );
+    assert_eq!(point_cost(SUBSCRIPTION_OPERATION, &no_variables()), Ok(1));
+}
+
+/// 1 repositories request + 25 issues requests, one per repository.
+const PAGE_ARGUMENT_AGGREGATE: u64 = 26;
+
+#[test]
+fn last_and_first_and_literal_and_variable_all_cost_the_same() {
+    // The same four spellings of one page size the node count is held to. A
+    // crate reading `first:` but not `last:` would see no connection at all in
+    // the `last:` documents and aggregate 1 rather than 26.
+    for (document, variables) in [
+        (OUTER_FIRST_LITERAL, no_variables()),
+        (OUTER_LAST_LITERAL, no_variables()),
+        (OUTER_FIRST_VARIABLE, page(25)),
+        (OUTER_LAST_VARIABLE, page(25)),
+    ] {
+        assert_eq!(
+            point_aggregate(document, &variables),
+            Ok(PAGE_ARGUMENT_AGGREGATE)
+        );
+        assert_eq!(point_cost(document, &variables), Ok(1));
+    }
+}
+
+#[test]
+fn a_field_supplying_both_first_and_last_is_priced_at_the_larger() {
+    // Resolved once at the root, so the aggregate is 1 whichever page size is
+    // read — the assertion that tells the two apart is the nested one below.
+    assert_eq!(point_aggregate(BOTH_FIRST_AND_LAST, &no_variables()), Ok(1));
+    assert_eq!(point_cost(BOTH_FIRST_AND_LAST, &no_variables()), Ok(1));
+
+    // With a child, the chosen page size becomes the child's multiplier: 30, the
+    // larger, so the price stays a worst case. Reading `first:` would give 4.
+    assert_eq!(
+        point_aggregate(BOTH_FIRST_AND_LAST_NESTED, &no_variables()),
+        Ok(BOTH_FIRST_AND_LAST_NESTED_AGGREGATE)
+    );
+    assert_ne!(
+        point_aggregate(BOTH_FIRST_AND_LAST_NESTED, &no_variables()),
+        Ok(4)
+    );
+    assert_eq!(
+        node_count(BOTH_FIRST_AND_LAST_NESTED, &no_variables()),
+        Ok(BOTH_FIRST_AND_LAST_NESTED_NODES)
+    );
 }

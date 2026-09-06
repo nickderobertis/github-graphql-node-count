@@ -17,13 +17,10 @@ consumers are other repositories' query gates.
 
 `nodeCount` is the maximum number of nodes **one query may return**, limited per
 query. It is not `cost`, the rate-limit **points** a call spends, metered per
-hour across everything a credential does. Both are computed here, out of **one**
-traversal — `node_count` and `point_cost` over the same parse, the same
-`Variables` and the same `NodeCountError` — because a second walk beside the
-first is the copy that drifts. The crate name predates the second answer and does
-not change: it is what a registry serves and what dependents write down. Keep the
-two numbers apart by name everywhere; the reason the distinction is written down
-this often is that they get confused.
+hour across everything a credential does. Both are computed here; keep the two
+apart by name everywhere, because they get confused. The crate name predates the
+second answer and does not change: it is what a registry serves and what
+dependents write down.
 
 ## Two standing goals on every task
 
@@ -169,9 +166,7 @@ a slow suite.
   `NODE_LIMIT`, `Variables`, `node_count` and `point_cost` are not renamed,
   retyped or narrowed. Adding a public item is fine.
 - Every public answer takes untrusted document text and returns an error rather
-  than panicking, and they all return the *same* error type: one parse and one
-  walk means one set of failures, so a second error type is a bug rather than an
-  addition.
+  than panicking.
 - **Security is gate-level.** No secrets in the tree (they live in the platform
   store, named by `gh-secrets.json`); every grant least-privilege.
 

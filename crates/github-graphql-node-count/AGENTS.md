@@ -11,7 +11,9 @@ The crate answers two numbers and walks the document **once** for both:
 `src/count.rs` accumulates a `Totals` pair, and the only line they part company
 on is where a connection contributes `multiplier * page_size` nodes but
 `multiplier` requests. A second parser or a second walk is the copy that drifts;
-do not add one.
+do not add one. That one walk is also why every answer fails with the same
+`NodeCountError` — one parse means one set of failures, so a second error type
+would be a bug rather than an addition.
 
 Keep the crate offline: no network, no credential, no schema, and no dependency
 that would need one. `graphql-parser` is the only dependency and should stay so.
