@@ -94,7 +94,7 @@ TOML
 cat >"$consumer/src/main.rs" <<'RUST' ||
   fail "could not write the consumer program under $consumer" \
     "check that TMPDIR is writable and has free space (df -h)"
-use github_graphql_node_count::{node_count, Variables, NODE_LIMIT};
+use github_graphql_node_count::{node_count, point_cost, Variables, NODE_LIMIT};
 
 fn main() {
     let document = r#"
@@ -111,7 +111,12 @@ fn main() {
     let nodes = node_count(document, &variables).expect("a well-formed document counts");
     assert_eq!(nodes, 550, "GitHub's own worked example is 550 nodes");
     assert!(nodes < NODE_LIMIT);
-    println!("install-smoke: {nodes} nodes, under the {NODE_LIMIT} limit");
+
+    // Both published answers, so a packaged crate missing either fails here.
+    let points = point_cost(document, &variables).expect("a well-formed document prices");
+    assert_eq!(points, 1, "51 requests round to GitHub's minimum of one point");
+
+    println!("install-smoke: {nodes} nodes under the {NODE_LIMIT} limit, {points} point");
 }
 RUST
 

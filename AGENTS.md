@@ -9,15 +9,21 @@ tradeoffs, and decisions the code cannot show.
 
 ## What this repo is
 
-One published Rust library, `github-graphql-node-count`. It answers the
-worst-case **node count** GitHub attributes to a GraphQL document, from the
-document's text and its page-size variable bindings alone — no network, no
-credential, no schema. Its consumers are other repositories' query gates.
+One published Rust library, `github-graphql-node-count`. It answers the two
+numbers GitHub charges a GraphQL document — the worst-case **node count** and the
+**rate-limit points** one call spends — from the document's text and its
+page-size variable bindings alone: no network, no credential, no schema. Its
+consumers are other repositories' query gates.
 
 `nodeCount` is the maximum number of nodes **one query may return**, limited per
 query. It is not `cost`, the rate-limit **points** a call spends, metered per
-hour across everything a credential does. This repo computes the first and says
-nothing about the second; keep the two apart by name everywhere.
+hour across everything a credential does. Both are computed here, out of **one**
+traversal — `node_count` and `point_cost` over the same parse, the same
+`Variables` and the same `NodeCountError` — because a second walk beside the
+first is the copy that drifts. The crate name predates the second answer and does
+not change: it is what a registry serves and what dependents write down. Keep the
+two numbers apart by name everywhere; the reason the distinction is written down
+this often is that they get confused.
 
 ## Two standing goals on every task
 
@@ -160,10 +166,12 @@ a slow suite.
 - The library reaches no network, reads no credential, and consults no schema.
   Anything that would need one belongs outside the crate.
 - Its public surface is a contract with the repositories that call it, so
-  `NODE_LIMIT`, `Variables` and `node_count` are not renamed, retyped or
-  narrowed. Adding a public item is fine.
-- `node_count` takes untrusted document text and returns an error rather than
-  panicking.
+  `NODE_LIMIT`, `Variables`, `node_count` and `point_cost` are not renamed,
+  retyped or narrowed. Adding a public item is fine.
+- Every public answer takes untrusted document text and returns an error rather
+  than panicking, and they all return the *same* error type: one parse and one
+  walk means one set of failures, so a second error type is a bug rather than an
+  addition.
 - **Security is gate-level.** No secrets in the tree (they live in the platform
   store, named by `gh-secrets.json`); every grant least-privilege.
 

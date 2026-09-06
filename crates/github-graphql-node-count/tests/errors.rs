@@ -1,10 +1,14 @@
 //! Every documented failure comes back as an error naming the field or position
 //! at fault — not a panic, not a zero, not a wrong count.
+//!
+//! The failures belong to the document rather than to one answer about it, so
+//! `point_cost` and `point_aggregate` are held to exactly the errors
+//! `node_count` gives — see `every_malformed_input` at the foot of this file.
 
 use std::error::Error;
 
 use github_graphql_node_count::{
-    node_count, NodeCountError, PageSizeArgument, Position, Variables,
+    node_count, point_aggregate, point_cost, NodeCountError, PageSizeArgument, Position, Variables,
 };
 
 /// No page-size variables bound at all.
@@ -525,4 +529,185 @@ fn the_page_size_argument_names_the_two_arguments_github_defines() {
         "{error:?}"
     );
     assert!(error.to_string().contains("`last: 0`"), "{error}");
+}
+
+/// One page-size variable bound to `value`.
+fn page(value: u32) -> Variables {
+    Variables::from([("page".to_string(), value)])
+}
+
+/// Every malformed input this file drives, named, with the variables that make it
+/// fail. Kept beside the fixtures rather than derived from them, so a fixture
+/// added above without a line here is a gap a reader can see.
+fn every_malformed_input() -> Vec<(&'static str, String, Variables)> {
+    vec![
+        (
+            "text that is not GraphQL",
+            UNPARSEABLE.to_string(),
+            unbound(),
+        ),
+        ("no operation", FRAGMENT_ONLY.to_string(), unbound()),
+        (
+            "two named operations",
+            TWO_OPERATIONS.to_string(),
+            unbound(),
+        ),
+        (
+            "two anonymous operations",
+            TWO_ANONYMOUS_OPERATIONS.to_string(),
+            unbound(),
+        ),
+        (
+            "an unbound page-size variable",
+            UNBOUND_PAGE_VARIABLE.to_string(),
+            unbound(),
+        ),
+        (
+            "a declared default standing in for no binding",
+            PAGE_VARIABLE_WITH_A_DEFAULT.to_string(),
+            unbound(),
+        ),
+        (
+            "a literal above the range",
+            LITERAL_ABOVE_THE_RANGE.to_string(),
+            unbound(),
+        ),
+        (
+            "a literal below the range",
+            LITERAL_BELOW_THE_RANGE.to_string(),
+            unbound(),
+        ),
+        (
+            "a negative literal",
+            LITERAL_NEGATIVE.to_string(),
+            unbound(),
+        ),
+        (
+            "a variable bound above the range",
+            UNBOUND_PAGE_VARIABLE.to_string(),
+            page(101),
+        ),
+        (
+            "a variable bound to zero",
+            UNBOUND_PAGE_VARIABLE.to_string(),
+            page(0),
+        ),
+        (
+            "a literal too large for an i64",
+            LITERAL_ENORMOUS.to_string(),
+            unbound(),
+        ),
+        (
+            "a page size that is not an integer",
+            PAGE_SIZE_IS_A_STRING.to_string(),
+            unbound(),
+        ),
+        (
+            "an undefined fragment",
+            UNDEFINED_FRAGMENT.to_string(),
+            unbound(),
+        ),
+        ("a fragment cycle", FRAGMENT_CYCLE.to_string(), unbound()),
+        (
+            "an out-of-range page size on an aliased field",
+            ALIASED_CONNECTION_OUT_OF_RANGE.to_string(),
+            unbound(),
+        ),
+        (
+            "a multiplier that outgrows a u64",
+            deeply_nested(10, "name"),
+            unbound(),
+        ),
+        (
+            "a field plus its subtree outgrowing a u64",
+            deeply_nested(9, "wide(first: 10) { tail(first: 1) { name } }"),
+            unbound(),
+        ),
+        (
+            "a sum across siblings outgrowing a u64",
+            deeply_nested(9, "left(first: 10) { name } right(first: 10) { name }"),
+            unbound(),
+        ),
+    ]
+}
+
+#[test]
+fn the_point_answers_fail_exactly_where_the_node_count_does() {
+    for (name, document, variables) in every_malformed_input() {
+        let counted = node_count(&document, &variables);
+        assert!(
+            counted.is_err(),
+            "{name}: this fixture is supposed to be malformed, got {counted:?}"
+        );
+
+        // One parse and one walk, so there is one set of failures. Comparing the
+        // whole `Result` compares the variant and every field in it, which is
+        // what a consumer switching between the two answers relies on.
+        assert_eq!(
+            point_cost(&document, &variables),
+            counted,
+            "{name}: point_cost must fail identically to node_count"
+        );
+        assert_eq!(
+            point_aggregate(&document, &variables),
+            counted,
+            "{name}: point_aggregate must fail identically to node_count"
+        );
+    }
+}
+
+#[test]
+fn every_malformed_input_covers_each_variant_the_shared_type_can_produce() {
+    // The list above is hand-written, so this is what stops it drifting from the
+    // error type: every variant `node_count` documents is driven at least once,
+    // and therefore driven through the point answers too.
+    let mut seen: Vec<&str> = every_malformed_input()
+        .into_iter()
+        .map(|(_, document, variables)| {
+            let error = error_from(&document, &variables);
+            match error {
+                NodeCountError::Parse { .. } => "Parse",
+                NodeCountError::NoOperation => "NoOperation",
+                NodeCountError::MultipleOperations { .. } => "MultipleOperations",
+                NodeCountError::UnboundVariable { .. } => "UnboundVariable",
+                NodeCountError::PageSizeOutOfRange { .. } => "PageSizeOutOfRange",
+                NodeCountError::PageSizeNotAnInteger { .. } => "PageSizeNotAnInteger",
+                NodeCountError::UndefinedFragment { .. } => "UndefinedFragment",
+                NodeCountError::FragmentCycle { .. } => "FragmentCycle",
+                NodeCountError::Overflow { .. } => "Overflow",
+                _ => "something else",
+            }
+        })
+        .collect();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(
+        seen,
+        [
+            "FragmentCycle",
+            "MultipleOperations",
+            "NoOperation",
+            "Overflow",
+            "PageSizeNotAnInteger",
+            "PageSizeOutOfRange",
+            "Parse",
+            "UnboundVariable",
+            "UndefinedFragment",
+        ]
+    );
+}
+
+#[test]
+fn a_well_formed_document_answers_both_numbers_where_a_malformed_one_answers_neither() {
+    // The other side of the same contract: where `node_count` answers, so do the
+    // point functions, and a page size at the edge of the range is not an error.
+    for (page_size, aggregate) in [(1u32, 1u64), (100, 1)] {
+        let variables = page(page_size);
+        assert!(node_count(UNBOUND_PAGE_VARIABLE, &variables).is_ok());
+        assert_eq!(
+            point_aggregate(UNBOUND_PAGE_VARIABLE, &variables),
+            Ok(aggregate)
+        );
+        assert_eq!(point_cost(UNBOUND_PAGE_VARIABLE, &variables), Ok(1));
+    }
 }

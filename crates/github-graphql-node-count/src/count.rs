@@ -1,8 +1,8 @@
-//! The walk that turns a parsed document into a node count.
+//! The one walk that turns a parsed document into both of this crate's answers.
 //!
 //! GitHub publishes the rules this implements at
 //! <https://docs.github.com/en/graphql/overview/rate-limits-and-node-limits-for-the-graphql-api>.
-//! Four of them are load-bearing here:
+//! Five of them are load-bearing here:
 //!
 //! 1. **Node counts multiply down a nested path.** A connection asking for `n`
 //!    items under a parent that already yields `m` nodes contributes `m * n`, and
@@ -17,6 +17,14 @@
 //! 4. **The limit one query may not reach is 500,000** — published as
 //!    [`NODE_LIMIT`](crate::NODE_LIMIT). This module computes the count; deciding
 //!    what to do about it is the caller's.
+//! 5. **A call's rate-limit points are the requests it needs, over a hundred.**
+//!    GitHub's point rule adds up "the number of requests needed to fulfill each
+//!    unique connection in the call", then divides by 100 and rounds. A
+//!    connection is *resolved* once per parent node, so the number of requests it
+//!    needs is exactly the `multiplier` [`Counter::field`] already has in hand —
+//!    the same quantity the node count multiplies by the page size. That is why
+//!    both answers come out of one descent, as a [`Totals`] pair, rather than out
+//!    of a second parser and a second walk that could drift from this one.
 
 use std::collections::HashMap;
 
@@ -38,6 +46,11 @@ const PAGE_SIZE_RANGE: std::ops::RangeInclusive<i64> = 1..=100;
 
 /// How an operation with no name is named in an error message.
 const ANONYMOUS: &str = "<anonymous>";
+
+/// GitHub's published floor: "The minimum point value of a call to the GraphQL
+/// API is 1." A call with no connection at all aggregates zero requests and still
+/// costs this, so the floor is the rule rather than a special case bolted on.
+const POINT_MINIMUM: u64 = 1;
 
 /// The document text `graphql-parser` is asked to parse names as `&str`.
 type Text<'a> = &'a str;
@@ -77,14 +90,70 @@ fn selection_label<'a>(selection: &Selection<'a, Text<'a>>) -> (String, Position
 }
 
 /// Turn a `None` from checked arithmetic into an attributed overflow error.
-fn checked(
-    value: Option<u64>,
+///
+/// Generic over what was being accumulated, so one `u64` product and a whole
+/// [`Totals`] pair are attributed the same way.
+fn checked<T>(
+    value: Option<T>,
     attribution: impl FnOnce() -> (String, Position),
-) -> Result<u64, NodeCountError> {
+) -> Result<T, NodeCountError> {
     value.ok_or_else(|| {
         let (field, position) = attribution();
         NodeCountError::Overflow { field, position }
     })
+}
+
+/// Both answers, accumulated together over one descent.
+///
+/// They differ in exactly one place — what a single connection contributes.
+/// Resolved under `multiplier` parent nodes and asking for `page_size` items,
+/// a connection returns `multiplier * page_size` nodes but is *resolved*
+/// `multiplier` times, so its own page size does not change what it costs. Only
+/// the page sizes strictly above it do.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Totals {
+    /// GitHub's `nodeCount`: the worst-case nodes the call may return.
+    pub(crate) nodes: u64,
+    /// The aggregate GitHub's step 1 produces: the number of requests needed to
+    /// fulfil every unique connection in the call.
+    pub(crate) aggregate: u64,
+}
+
+impl Totals {
+    /// What a selection contributing nothing contributes — and the identity the
+    /// sum across siblings starts from.
+    const ZERO: Self = Self {
+        nodes: 0,
+        aggregate: 0,
+    };
+
+    /// Sum two contributions, `None` if either accumulator outgrows a `u64`.
+    ///
+    /// A connection contributes `multiplier` requests and at least as many nodes,
+    /// so `aggregate` can never be the accumulator that overflows first; it is
+    /// still added checked rather than wrapping, because a silent wrap here would
+    /// answer a number instead of the [`NodeCountError::Overflow`] the node count
+    /// is about to return anyway.
+    fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            nodes: self.nodes.checked_add(other.nodes)?,
+            aggregate: self.aggregate.checked_add(other.aggregate)?,
+        })
+    }
+}
+
+/// GitHub's step 2: divide the aggregate by 100, round to the nearest whole
+/// number, and never answer below [`POINT_MINIMUM`].
+///
+/// Rounding is to the nearest whole number with ties away from zero, which for a
+/// non-negative aggregate is `max(1, (A + 50) / 100)`. It is spelled as a
+/// quotient plus a carried remainder rather than as `(A + 50) / 100` so that an
+/// aggregate within 50 of `u64::MAX` cannot overflow the addition, and in
+/// integers rather than through an `f64` because a float round is a needless way
+/// to be subtly wrong about a value this one is compared against.
+pub(crate) fn points(aggregate: u64) -> u64 {
+    let rounded = aggregate / 100 + u64::from(aggregate % 100 >= 50);
+    rounded.max(POINT_MINIMUM)
 }
 
 /// Counts one operation, resolving spreads against the document's fragments.
@@ -102,8 +171,8 @@ impl<'a> Counter<'a> {
         &mut self,
         set: &'a SelectionSet<'a, Text<'a>>,
         multiplier: u64,
-    ) -> Result<u64, NodeCountError> {
-        let mut total: u64 = 0;
+    ) -> Result<Totals, NodeCountError> {
+        let mut total = Totals::ZERO;
         for selection in &set.items {
             let contribution = self.selection(selection, multiplier)?;
             total = checked(total.checked_add(contribution), || {
@@ -118,7 +187,7 @@ impl<'a> Counter<'a> {
         &mut self,
         selection: &'a Selection<'a, Text<'a>>,
         multiplier: u64,
-    ) -> Result<u64, NodeCountError> {
+    ) -> Result<Totals, NodeCountError> {
         match selection {
             Selection::Field(field) => self.field(field, multiplier),
             // An inline fragment adds no level of its own: its selections are
@@ -150,22 +219,30 @@ impl<'a> Counter<'a> {
         }
     }
 
-    /// A field's own nodes, plus everything nested beneath them.
+    /// A field's own contribution, plus everything nested beneath it.
     fn field(
         &mut self,
         field: &'a Field<'a, Text<'a>>,
         multiplier: u64,
-    ) -> Result<u64, NodeCountError> {
+    ) -> Result<Totals, NodeCountError> {
         let Some(page_size) = self.page_size(field)? else {
             // No `first`/`last`, so this crate does not treat the field as a
-            // connection: it adds no nodes and no multiplier, and its children
-            // are counted against the same parent nodes it is.
+            // connection: it adds no nodes, no requests and no multiplier, and
+            // its children are counted against the same parent nodes it is.
             return self.selection_set(&field.selection_set, multiplier);
         };
         let label = || (field_label(field), field.position.into());
         let nodes = checked(multiplier.checked_mul(u64::from(page_size)), label)?;
+        // The one line the two answers part company on: this connection returns
+        // `nodes` nodes, but GitHub resolves it once per parent node, so it needs
+        // `multiplier` requests however large a page each resolution asks for.
+        let own = Totals {
+            nodes,
+            aggregate: multiplier,
+        };
+        // Descend with `nodes`, the same multiplier either answer nests against.
         let nested = self.selection_set(&field.selection_set, nodes)?;
-        checked(nodes.checked_add(nested), label)
+        checked(own.checked_add(nested), label)
     }
 
     /// The page size a field asks for, or `None` when it is not a connection.
@@ -231,11 +308,13 @@ impl<'a> Counter<'a> {
     }
 }
 
-/// Count the one operation in `document` under `variables`.
+/// Walk the one operation in `document` under `variables`, accumulating both
+/// answers.
 ///
-/// This is [`crate::node_count`]'s body; the split keeps the public module free
-/// of the walk.
-pub(crate) fn count(document: &str, variables: &Variables) -> Result<u64, NodeCountError> {
+/// This is the body behind [`crate::node_count`], [`crate::point_aggregate`] and
+/// [`crate::point_cost`] alike; the split keeps the public module free of the
+/// walk, and the single return keeps the three from drifting apart.
+pub(crate) fn totals(document: &str, variables: &Variables) -> Result<Totals, NodeCountError> {
     let parsed: Document<'_, Text<'_>> =
         graphql_parser::parse_query(document).map_err(|error| NodeCountError::Parse {
             message: error.to_string(),

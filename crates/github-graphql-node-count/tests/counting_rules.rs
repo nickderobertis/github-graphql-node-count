@@ -1,9 +1,11 @@
 //! The counting rules GitHub publishes, one fixture and one asserted total each.
 //!
 //! Every expected total is a named constant beside the document it belongs to,
-//! so a different document reaching the same number does not pass.
+//! so a different document reaching the same number does not pass. Both of the
+//! crate's answers are held to their own rules here: the node count that a query
+//! may return, and the rate-limit points one call of it spends.
 
-use github_graphql_node_count::{node_count, Variables};
+use github_graphql_node_count::{node_count, point_aggregate, point_cost, Variables};
 
 /// No page-size variables: the document binds every page size as a literal.
 fn no_variables() -> Variables {
@@ -424,4 +426,309 @@ fn a_fragment_that_is_never_spread_is_not_counted() {
         node_count(UNUSED_FRAGMENT, &no_variables()),
         Ok(UNUSED_FRAGMENT_NODES)
     );
+}
+
+// GitHub's point rule, fixture by fixture. A connection is *resolved* once per
+// parent node, so what it contributes to the aggregate is the product of the page
+// sizes strictly above it — its own page size never appears in that product. The
+// call then costs `max(1, round(aggregate / 100))`.
+
+/// Three levels of connection. `repositories` is resolved once, `issues` once per
+/// repository, and `comments` once per issue — so the aggregate multiplies down
+/// the path exactly as the node count does, one factor short.
+const POINT_NESTED_PATH: &str = r#"
+query {
+  viewer {
+    repositories(first: 100) {
+      edges {
+        node {
+          issues(first: 100) {
+            edges {
+              node {
+                comments(first: 10) { nodes { bodyHTML } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+
+/// 1 repositories request + 100 issues requests + 100 x 100 = 10,000 comments
+/// requests.
+const POINT_NESTED_PATH_AGGREGATE: u64 = 10_101;
+/// 10,101 / 100 = 101.01, which rounds to 101.
+const POINT_NESTED_PATH_POINTS: u64 = 101;
+/// 100 repositories + 100 x 100 = 10,000 issues + 100 x 100 x 10 = 100,000
+/// comments. Stated here because it is the number the aggregate is *not*.
+const POINT_NESTED_PATH_NODES: u64 = 110_100;
+
+#[test]
+fn requests_multiply_down_a_nested_path() {
+    assert_eq!(
+        point_aggregate(POINT_NESTED_PATH, &no_variables()),
+        Ok(POINT_NESTED_PATH_AGGREGATE)
+    );
+    assert_eq!(
+        point_cost(POINT_NESTED_PATH, &no_variables()),
+        Ok(POINT_NESTED_PATH_POINTS)
+    );
+    // The two answers are different numbers about the same document, and the
+    // node count is the larger by the deepest connection's own page size.
+    assert_eq!(
+        node_count(POINT_NESTED_PATH, &no_variables()),
+        Ok(POINT_NESTED_PATH_NODES)
+    );
+}
+
+/// Two connections under one parent, each resolved once per parent node. A
+/// counter that took the maximum across siblings would aggregate 101 here and
+/// answer one point.
+const POINT_SIBLING_PATHS: &str = r#"
+query {
+  viewer {
+    repositories(first: 100) {
+      edges {
+        node {
+          issues(first: 20) { edges { node { title } } }
+          pullRequests(first: 30) { edges { node { title } } }
+        }
+      }
+    }
+  }
+}
+"#;
+
+/// 1 repositories request + 100 issues requests + 100 pullRequests requests.
+const POINT_SIBLING_PATHS_AGGREGATE: u64 = 201;
+/// 201 / 100 = 2.01, which rounds to 2.
+const POINT_SIBLING_PATHS_POINTS: u64 = 2;
+/// What a counter taking the maximum across the two siblings would aggregate.
+const POINT_MAXIMUM_ACROSS_SIBLINGS: u64 = 101;
+
+#[test]
+fn requests_sum_across_sibling_paths() {
+    assert_eq!(
+        point_aggregate(POINT_SIBLING_PATHS, &no_variables()),
+        Ok(POINT_SIBLING_PATHS_AGGREGATE)
+    );
+    assert_ne!(
+        point_aggregate(POINT_SIBLING_PATHS, &no_variables()),
+        Ok(POINT_MAXIMUM_ACROSS_SIBLINGS),
+        "sibling connections must sum, not compete"
+    );
+    assert_eq!(
+        point_cost(POINT_SIBLING_PATHS, &no_variables()),
+        Ok(POINT_SIBLING_PATHS_POINTS)
+    );
+}
+
+// The property that makes the two answers different, and the one a reader is
+// most likely to get wrong: a connection's *own* page size changes how many
+// nodes it returns and not how many times it is resolved. These two documents
+// differ in one digit — the innermost page size — and nowhere else.
+
+/// The innermost connection asks for a single item.
+const LEAF_PAGE_OF_ONE: &str = r#"
+query {
+  viewer {
+    repositories(first: 100) {
+      edges {
+        node {
+          issues(first: 100) {
+            edges {
+              node {
+                comments(first: 1) { nodes { bodyHTML } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+
+/// The same document with the innermost connection asking for a hundred.
+const LEAF_PAGE_OF_A_HUNDRED: &str = r#"
+query {
+  viewer {
+    repositories(first: 100) {
+      edges {
+        node {
+          issues(first: 100) {
+            edges {
+              node {
+                comments(first: 100) { nodes { bodyHTML } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+
+/// 1 + 100 + 10,000, whichever page the innermost connection asks for: it is
+/// resolved 10,000 times either way.
+const LEAF_PAGE_AGGREGATE: u64 = 10_101;
+/// 10,101 / 100 = 101.01, which rounds to 101 — for both documents.
+const LEAF_PAGE_POINTS: u64 = 101;
+/// 100 + 10,000 + 10,000 x 1 nodes.
+const LEAF_PAGE_OF_ONE_NODES: u64 = 20_100;
+/// 100 + 10,000 + 10,000 x 100 nodes: a hundred times the leaf's contribution.
+const LEAF_PAGE_OF_A_HUNDRED_NODES: u64 = 1_010_100;
+
+#[test]
+fn a_connections_own_page_size_does_not_change_what_it_costs() {
+    for document in [LEAF_PAGE_OF_ONE, LEAF_PAGE_OF_A_HUNDRED] {
+        assert_eq!(
+            point_aggregate(document, &no_variables()),
+            Ok(LEAF_PAGE_AGGREGATE)
+        );
+        assert_eq!(point_cost(document, &no_variables()), Ok(LEAF_PAGE_POINTS));
+    }
+
+    // The same two documents answer very different node counts, so the equality
+    // above is the point rule holding rather than the documents being the same.
+    assert_eq!(
+        node_count(LEAF_PAGE_OF_ONE, &no_variables()),
+        Ok(LEAF_PAGE_OF_ONE_NODES)
+    );
+    assert_eq!(
+        node_count(LEAF_PAGE_OF_A_HUNDRED, &no_variables()),
+        Ok(LEAF_PAGE_OF_A_HUNDRED_NODES)
+    );
+    assert_ne!(LEAF_PAGE_OF_ONE_NODES, LEAF_PAGE_OF_A_HUNDRED_NODES);
+}
+
+/// Two root connections, each resolved once and each carrying one sub-connection
+/// resolved 74 times: an aggregate of exactly 150, the tie the rounding has to
+/// settle.
+const AGGREGATE_OF_EXACTLY_150: &str = r#"
+query {
+  viewer {
+    repositories(first: 74) {
+      edges { node { issues(first: 5) { nodes { title } } } }
+    }
+    followers(first: 74) {
+      edges { node { gists(first: 5) { nodes { name } } } }
+    }
+  }
+}
+"#;
+
+/// The same document with one page size a single item smaller.
+const AGGREGATE_OF_149: &str = r#"
+query {
+  viewer {
+    repositories(first: 74) {
+      edges { node { issues(first: 5) { nodes { title } } } }
+    }
+    followers(first: 73) {
+      edges { node { gists(first: 5) { nodes { name } } } }
+    }
+  }
+}
+"#;
+
+/// (1 + 74) + (1 + 74).
+const EXACTLY_150_AGGREGATE: u64 = 150;
+/// 1.5 exactly; the tie goes away from zero, so 2 rather than 1.
+const EXACTLY_150_POINTS: u64 = 2;
+/// (1 + 74) + (1 + 73).
+const JUST_UNDER_AGGREGATE: u64 = 149;
+/// 1.49, which rounds down to 1.
+const JUST_UNDER_POINTS: u64 = 1;
+
+#[test]
+fn the_aggregate_rounds_to_the_nearest_point_with_ties_away_from_zero() {
+    assert_eq!(
+        point_aggregate(AGGREGATE_OF_EXACTLY_150, &no_variables()),
+        Ok(EXACTLY_150_AGGREGATE)
+    );
+    assert_eq!(
+        point_cost(AGGREGATE_OF_EXACTLY_150, &no_variables()),
+        Ok(EXACTLY_150_POINTS)
+    );
+
+    assert_eq!(
+        point_aggregate(AGGREGATE_OF_149, &no_variables()),
+        Ok(JUST_UNDER_AGGREGATE)
+    );
+    assert_eq!(
+        point_cost(AGGREGATE_OF_149, &no_variables()),
+        Ok(JUST_UNDER_POINTS)
+    );
+}
+
+#[test]
+fn a_document_with_no_connection_still_costs_githubs_minimum_of_one() {
+    // Nothing in this document carries `first`/`last`, so it aggregates no
+    // requests at all — and GitHub's published minimum is one point, not zero.
+    assert_eq!(
+        point_aggregate(NO_PAGE_SIZE_ANYWHERE, &no_variables()),
+        Ok(0)
+    );
+    assert_eq!(point_cost(NO_PAGE_SIZE_ANYWHERE, &no_variables()), Ok(1));
+}
+
+#[test]
+fn a_single_connection_resolved_once_costs_one() {
+    // One root connection: one request, so 0.01 points before the minimum
+    // applies, and one point after it.
+    assert_eq!(point_aggregate(SHORTHAND_OPERATION, &no_variables()), Ok(1));
+    assert_eq!(point_cost(SHORTHAND_OPERATION, &no_variables()), Ok(1));
+
+    // Its page size is the largest GitHub allows and it still costs one, because
+    // a connection's own page size is not what it is charged for.
+    let wide = r#"
+{
+  viewer {
+    repositories(first: 100) { edges { node { name } } }
+  }
+}
+"#;
+    assert_eq!(point_aggregate(wide, &no_variables()), Ok(1));
+    assert_eq!(point_cost(wide, &no_variables()), Ok(1));
+}
+
+#[test]
+fn a_spread_fragments_connections_are_aggregated_at_the_spreads_multiplier() {
+    // The fragment's `issues` connection is reached under 10 repositories, so it
+    // is resolved 10 times: 1 + 10 requests, the same walk the node count takes.
+    assert_eq!(point_aggregate(SPREAD_FRAGMENT, &no_variables()), Ok(11));
+    assert_eq!(point_cost(SPREAD_FRAGMENT, &no_variables()), Ok(1));
+
+    // Reached through another spread, two levels down, it is still aggregated at
+    // the multiplier of the path that reaches it: 1 + 6.
+    assert_eq!(point_aggregate(NESTED_SPREADS, &no_variables()), Ok(7));
+
+    // An unspread fragment's connection is never resolved, so it is never
+    // charged: 1 request for `repositories` and nothing for the dead weight.
+    assert_eq!(point_aggregate(UNUSED_FRAGMENT, &no_variables()), Ok(1));
+}
+
+#[test]
+fn a_page_size_variable_moves_the_aggregate_the_way_it_moves_the_multiplier() {
+    // `repositories(first: $page)` is resolved once whatever `$page` is bound to;
+    // the `issues` beneath it is resolved once per repository. So the aggregate
+    // is 1 + n, growing linearly where the node count grows as n squared.
+    for (size, aggregate, nodes) in [
+        (3u32, 4u64, VARIABLE_SPENT_TWICE_AT_3),
+        (5, 6, VARIABLE_SPENT_TWICE_AT_5),
+        (9, 10, VARIABLE_SPENT_TWICE_AT_9),
+    ] {
+        let variables = page(size);
+        assert_eq!(
+            point_aggregate(VARIABLE_SPENT_TWICE, &variables),
+            Ok(aggregate)
+        );
+        assert_eq!(node_count(VARIABLE_SPENT_TWICE, &variables), Ok(nodes));
+        // Every one of these is under a point, so all three cost the minimum.
+        assert_eq!(point_cost(VARIABLE_SPENT_TWICE, &variables), Ok(1));
+    }
 }
