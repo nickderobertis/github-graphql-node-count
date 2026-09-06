@@ -13,7 +13,7 @@ members = [
 # Shared metadata every member inherits, so one logical version spans every
 # manifest and release-plz has a single number to write.
 [workspace.package]
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 # The oldest toolchain this crate is known to build on, verified by `just msrv`
 # and enforced continuously by clippy (clippy.toml). It is a promise to
@@ -30,7 +30,7 @@ authors = ["Nick DeRobertis <derobertis.nick@gmail.com>"]
 warnings = "deny"
 
 [workspace.dependencies]
-github-graphql-node-count = { path = "crates/github-graphql-node-count", version = "0.0.0" }
+github-graphql-node-count = { path = "crates/github-graphql-node-count", version = "0.0.1" }
 graphql-parser = "0.4.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
