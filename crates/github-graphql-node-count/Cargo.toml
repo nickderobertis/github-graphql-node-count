@@ -1,6 +1,6 @@
 [package]
 name = "github-graphql-node-count"
-description = "Compute the worst-case node count GitHub's GraphQL API attributes to a query, offline, from the query text and its page-size variables."
+description = "Compute, offline, the node count and the rate-limit point cost GitHub's GraphQL API charges a query, from the query text and its page-size variables."
 keywords = ["github", "graphql", "rate-limit", "node-count", "static-analysis"]
 categories = ["development-tools", "parsing"]
 readme = "../../README.md"

@@ -9,15 +9,18 @@ tradeoffs, and decisions the code cannot show.
 
 ## What this repo is
 
-One published Rust library, `github-graphql-node-count`. It answers the
-worst-case **node count** GitHub attributes to a GraphQL document, from the
-document's text and its page-size variable bindings alone — no network, no
-credential, no schema. Its consumers are other repositories' query gates.
+One published Rust library, `github-graphql-node-count`. It answers the two
+numbers GitHub charges a GraphQL document — the worst-case **node count** and the
+**rate-limit points** one call spends — from the document's text and its
+page-size variable bindings alone: no network, no credential, no schema. Its
+consumers are other repositories' query gates.
 
 `nodeCount` is the maximum number of nodes **one query may return**, limited per
 query. It is not `cost`, the rate-limit **points** a call spends, metered per
-hour across everything a credential does. This repo computes the first and says
-nothing about the second; keep the two apart by name everywhere.
+hour across everything a credential does. Both are computed here; keep the two
+apart by name everywhere, because they get confused. The crate name predates the
+second answer and does not change: it is what a registry serves and what
+dependents write down.
 
 ## Two standing goals on every task
 

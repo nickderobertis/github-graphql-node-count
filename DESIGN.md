@@ -20,11 +20,39 @@ Two things follow, and neither is negotiable on a maintainer's judgment alone:
 - **The public surface is frozen by agreement, not by preference.**
   `NODE_LIMIT`, `Variables` and `node_count(&str, &Variables) -> Result<u64,
   NodeCountError>` were specified before this repository existed, because
-  `onetaskgraph`'s GitHub Projects source is written against exactly them. A
-  consumer's build is what reconciles the two sides, so changing one of the three
-  breaks a repository this one cannot see. `NodeCountError` is
-  `#[non_exhaustive]` for the same reason: adding a variant must not be a
-  breaking change.
+  `onetaskgraph`'s GitHub Projects source is written against exactly them.
+  `point_cost` was agreed the same way and later, with the same signature so a
+  consumer reaches for it identically. A consumer's build is what reconciles the
+  two sides, so changing one of them breaks a repository this one cannot see.
+  `NodeCountError` is `#[non_exhaustive]` for the same reason: adding a variant
+  must not be a breaking change.
+
+## Points are computed here, and out of the same traversal
+
+The user asked for a second answer beside the node count: what one call of a
+document spends against GitHub's hourly rate limit. Two constraints came with the
+request, and neither is a maintainer's to trade away.
+
+- **One traversal, not two.** The number of requests a connection needs is the
+  number of times it is resolved, which is the product of the page sizes strictly
+  above it — the `multiplier` this crate's walk already holds on the line that
+  computes the node count. So the two answers are one descent accumulating a
+  pair, differing on exactly one line. The reason to put this arithmetic in this
+  crate at all is that the walk already exists here; a second parser and a second
+  walk beside the first would be the copy that drifts, and would give the change
+  no reason to be here rather than in the consumer.
+- **One error type, one variable map.** `point_cost` fails on exactly the inputs
+  `node_count` fails on and means the same things by each failure, because there
+  is one parse behind both. A second error type would make a consumer hold two
+  vocabularies for one document.
+
+The rule was verified rather than inferred, and the user did the verifying:
+eleven documents were predicted by hand from their text and then priced by GitHub
+with `rateLimit(dryRun: true)`, and the prediction matched all eleven. GitHub's
+own published worked example — 5,101 requests scoring 51 points — is what the
+suite anchors on, and its document text and both figures are written into the
+fixture rather than fetched, so a later edit to that page cannot move them under
+us.
 
 ## It stays offline, credential-free and schema-free
 
@@ -43,3 +71,13 @@ wrong way by a factor of ten and was argued rather than measured. The rate
 limiting is shared across everything the account does, so the cost landed on
 plan-board reads, settlement projections, and a manager reading the state of its
 own work, all at once.
+
+The point answer arrived from the second half of that same story. The user was
+told that repository's GitHub suite was eating about 30% of the account's hourly
+GraphQL budget, found that very high for what it does, and two changes to the
+Projects source cut it substantially. Nothing anywhere could *check* that they
+had, or that a later change did not quietly give it back: node count was computed
+offline and gated on, while points — the number that actually runs out — were
+observable only by asking GitHub, which a required check on a fork pull request
+cannot do. That is the whole difference this crate's second answer makes: a cost
+reduction that was measured once, versus one that stays reduced.
