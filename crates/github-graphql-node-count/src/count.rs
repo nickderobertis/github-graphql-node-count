@@ -17,14 +17,12 @@
 //! 4. **The limit one query may not reach is 500,000** — published as
 //!    [`NODE_LIMIT`](crate::NODE_LIMIT). This module computes the count; deciding
 //!    what to do about it is the caller's.
-//! 5. **A call's rate-limit points are the requests it needs, over a hundred.**
-//!    GitHub's point rule adds up "the number of requests needed to fulfill each
-//!    unique connection in the call", then divides by 100 and rounds. A
-//!    connection is *resolved* once per parent node, so the number of requests it
-//!    needs is exactly the `multiplier` [`Counter::field`] already has in hand —
-//!    the same quantity the node count multiplies by the page size. That is why
-//!    both answers come out of one descent, as a [`Totals`] pair, rather than out
-//!    of a second parser and a second walk that could drift from this one.
+//! 5. **The point rule is this same descent, one factor short.** A connection is
+//!    resolved once per parent node, so the requests it needs are the
+//!    `multiplier` [`Counter::field`] already has in hand — the quantity the node
+//!    count then multiplies by the page size. That is why both answers accumulate
+//!    into one [`Totals`] pair here rather than into a second walk that could
+//!    drift from this one.
 
 use std::collections::HashMap;
 
@@ -151,6 +149,14 @@ impl Totals {
 /// aggregate within 50 of `u64::MAX` cannot overflow the addition, and in
 /// integers rather than through an `f64` because a float round is a needless way
 /// to be subtly wrong about a value this one is compared against.
+// llmlint: ignore[contracts_have_one_source_or_a_drift_gate] every rule this crate
+// implements is GitHub's and restated by hand — PAGE_SIZE_RANGE and NODE_LIMIT no less than
+// this formula — because the crate reaching a network or a credential to reconcile against
+// its source is the one thing AGENTS.md forbids outright, and a live `rateLimit(dryRun:
+// true)` oracle tier was considered and excluded there by name. What stands in for the gate
+// is the same thing it does for the node count: GitHub's published worked example, whose
+// document text and both figures (5,101 requests scoring 51 points) are pinned in
+// `github-graphql-node-count-e2e`, so a formula that stopped matching the source fails there.
 pub(crate) fn points(aggregate: u64) -> u64 {
     let rounded = aggregate / 100 + u64::from(aggregate % 100 >= 50);
     rounded.max(POINT_MINIMUM)

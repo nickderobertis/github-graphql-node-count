@@ -162,9 +162,9 @@ a slow suite.
   suppression carrying a reason at its site.
 - The library reaches no network, reads no credential, and consults no schema.
   Anything that would need one belongs outside the crate.
-- Its public surface is a contract with the repositories that call it, so the
-  symbols `crates/github-graphql-node-count/AGENTS.md` names are not renamed,
-  retyped or narrowed. Adding a public item is fine.
+- Its public surface is a contract with the repositories that call it, so
+  `NODE_LIMIT`, `Variables` and `node_count` are not renamed, retyped or
+  narrowed. Adding a public item is fine.
 - `node_count` takes untrusted document text and returns an error rather than
   panicking.
 - **Security is gate-level.** No secrets in the tree (they live in the platform

@@ -531,7 +531,6 @@ fn the_page_size_argument_names_the_two_arguments_github_defines() {
     assert!(error.to_string().contains("`last: 0`"), "{error}");
 }
 
-/// One page-size variable bound to `value`.
 fn page(value: u32) -> Variables {
     Variables::from([("page".to_string(), value)])
 }
