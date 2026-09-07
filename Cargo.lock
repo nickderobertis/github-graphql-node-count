@@ -26,14 +26,14 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "github-graphql-node-count"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "graphql-parser",
 ]
 
 [[package]]
 name = "github-graphql-node-count-e2e"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "github-graphql-node-count",
 ]
@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "release-contract"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -238,7 +238,7 @@ checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
 
 [[package]]
 name = "tooling"
-version = "0.0.0"
+version = "0.0.1"
 
 [[package]]
 name = "unicode-ident"
