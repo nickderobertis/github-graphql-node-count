@@ -12,7 +12,8 @@
       "{workspaceRoot}/rustfmt.toml",
       "{workspaceRoot}/clippy.toml",
       "{workspaceRoot}/Cargo.toml",
-      "{workspaceRoot}/Cargo.lock"
+      "{workspaceRoot}/Cargo.lock",
+      "{workspaceRoot}/.cargo/config.toml"
     ],
     "default": [
       "{projectRoot}/**/*",
