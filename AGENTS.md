@@ -76,7 +76,7 @@ as a follow-up.
 
 ## Command surface
 
-Use the `just` recipes; `just --list` is the inventory. Two rules it does not
+Use the `just` recipes; `just --list` is the inventory. Three rules it does not
 show:
 
 - **`just check` is offline and credential-free.** Keep it that way. Anything
