@@ -21,7 +21,7 @@
       "command": "just _crate-build release-contract"
     },
     "test": {
-      "command": "just _crate-test release-contract",
+      "command": "just _crate-test release-contract --test release_targets",
       "inputs": [
         "releaseConfiguration"
       ]

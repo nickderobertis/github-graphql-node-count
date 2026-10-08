@@ -23,3 +23,9 @@ toml = { workspace = true }
 [[test]]
 name = "release_targets"
 path = "tests/release_targets.rs"
+
+# Run by `workspace:test` rather than this crate's own `test` target, so that a
+# change to any project's definition or manifest re-runs it — see AGENTS.md.
+[[test]]
+name = "scope_policy"
+path = "tests/scope_policy.rs"

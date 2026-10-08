@@ -54,7 +54,8 @@ as a follow-up.
   `release-contract`'s suite says what each scope may depend on — Nx's own
   module-boundary rule is an ESLint rule and there is no JavaScript here, so the
   boundary is enforced by reading the definitions and manifests that draw the real
-  edges. A new project declares its scope there or fails.
+  edges. A new project declares its scope there, and joins the root `workspace`
+  project's `implicitDependencies` (where that check runs), or fails.
 - **Excluded, and why:**
   - *OS matrix* — pure computation over a `&str`: no I/O, no platform-conditional
     code. One Linux runner proves it; a matrix would triple CI for identical
@@ -117,10 +118,12 @@ tier — left because of what it touches, not how long it takes. Promote only fr
 fresh measurement; the numbers behind this decision, and how to retake them, are
 in [docs/gate-tiers.md](docs/gate-tiers.md).
 
-The `workspace` project, which owns the aggregate `coverage` target, is always in
-the affected set — coverage is a property of the union rather than of any one
-project. At these timings that costs seconds; it would not be free in a repo with
-a slow suite.
+The `workspace` project, which owns the aggregate `coverage` target and the
+`SCOPE_POLICY` boundary check (`workspace:test`), is in the affected set whenever
+any project is, because it lists every project in `implicitDependencies` —
+coverage is a property of the union, and a graph edge can be drawn in any
+project's files. At these timings that costs seconds; it would not be free in a
+repo with a slow suite.
 
 ## Commits, releases, and merging
 
