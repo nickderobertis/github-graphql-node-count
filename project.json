@@ -5,10 +5,27 @@
   "tags": [
     "scope:repo"
   ],
+  "implicitDependencies": [
+    "github-graphql-node-count",
+    "github-graphql-node-count-e2e",
+    "install-smoke",
+    "release-contract",
+    "tooling"
+  ],
   "targets": {
+    "test": {
+      "command": "just _crate-test release-contract --test scope_policy",
+      "inputs": [
+        "{workspaceRoot}/**/project.json",
+        "{workspaceRoot}/**/Cargo.toml",
+        "{workspaceRoot}/crates/release-contract/**/*",
+        "sharedGlobals"
+      ]
+    },
     "coverage": {
       "command": "just _coverage-report",
       "dependsOn": [
+        "test",
         {
           "projects": "tag:lang:rust",
           "target": "test"

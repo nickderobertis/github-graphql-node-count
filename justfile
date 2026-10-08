@@ -149,7 +149,7 @@ msrv:
     @floor="$(sed -n 's/^rust-version *= *"\([^"]*\)".*/\1/p' Cargo.toml)"; \
       rustup toolchain install "$floor" --profile minimal >/dev/null 2>&1 || true; \
       RUSTFLAGS="-D warnings" cargo +"$floor" check --workspace --locked --all-targets --quiet \
-        || { echo "the $floor floor no longer builds — install that toolchain, or raise rust-version in Cargo.toml (and clippy.toml)" >&2; exit 1; }
+        || { echo "the $floor floor no longer builds — install that toolchain, or raise rust-version in the root Cargo.toml, the one declaration both cargo and clippy read" >&2; exit 1; }
 
 # Prove the path a consumer takes (`cargo add`): package the crate and build the
 # README's example against that package in a project of its own. Separate from
@@ -208,8 +208,11 @@ _install-smoke:
 # into the shared directory instead of reporting. The floor is enforced once, by
 # `_coverage-report`, over the union — a per-crate report would fail the moment a
 # suite moved into a sibling project.
-_crate-test crate:
-    @cargo llvm-cov --no-report nextest -p {{crate}} --locked --status-level fail \
+#
+# `targets` narrows the run to some of the crate's test binaries (`--test NAME`),
+# for a crate whose suites belong to different Nx targets.
+_crate-test crate *targets:
+    @cargo llvm-cov --no-report nextest -p {{crate}} {{targets}} --locked --status-level fail \
       || { echo "tests failed in {{crate}} — see the failures above" >&2; exit 1; }
 
 # The one aggregate coverage report, and the gate's floor.
