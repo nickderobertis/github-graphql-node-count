@@ -1,11 +1,7 @@
 //! Hold the project graph to `SCOPE_POLICY`, the module-boundary rule.
 //!
-//! This binary is not run by `release-contract:test`, whose inputs are the
-//! release configuration: an edge is drawn in a `project.json` or a member
-//! `Cargo.toml` that another project owns, so neither the affected set nor that
-//! target's cache key would move with it. It runs as `workspace:test`, which
-//! depends on every project and is keyed on every definition and manifest — see
-//! this crate's AGENTS.md.
+//! Runs as `workspace:test`, not `release-contract:test`; this crate's AGENTS.md
+//! says why.
 
 mod support;
 
