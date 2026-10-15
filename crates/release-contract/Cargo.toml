@@ -18,6 +18,7 @@ workspace = true
 [dev-dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_norway = { workspace = true }
 toml = { workspace = true }
 
 [[test]]
@@ -29,3 +30,7 @@ path = "tests/release_targets.rs"
 [[test]]
 name = "scope_policy"
 path = "tests/scope_policy.rs"
+
+[[test]]
+name = "release_workflow"
+path = "tests/release_workflow.rs"
