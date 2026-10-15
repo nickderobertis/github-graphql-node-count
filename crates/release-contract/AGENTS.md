@@ -24,3 +24,12 @@ those edges, would break the rule below.
 It depends on **nothing** in this workspace, deliberately: a change to the library
 must not reach this suite, and this suite must not reach back into what depends on
 it. Its own tests are what keep that true.
+
+`tests/release_workflow.rs` holds `.github/workflows/release-plz.yml` to arming
+auto-merge on the release pull request behind its required checks: one step,
+after `release-plz release-pr` in the same job, with the release PAT, `--auto` on
+every `gh pr merge` and `--admin` on none. It also runs that step's own script
+under `bash`. `gh` is the one thing doubled, and the double needs the real `jq` on
+`PATH`. The double is checked in under `tests/gh-double/` instead of written by
+the test, because nextest runs each test in its own process, and one process
+executing a file another is still writing fails with "Text file busy".

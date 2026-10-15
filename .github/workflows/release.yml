@@ -5,8 +5,8 @@
 # so it re-runs no lint, type-check or test target. See "Commits, releases, and
 # merging" in AGENTS.md.
 #
-# Nothing here is dispatched by hand: the only human action in a release is
-# merging the release PR.
+# Nothing here is dispatched by hand, and nothing in a release is a human
+# action: the release PR merges itself once its required checks pass.
 
 name: release
 

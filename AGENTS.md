@@ -139,12 +139,15 @@ repo with a slow suite.
   `setup_github_governance.py` invocation, and this list together.
 - **Releases: release-plz, a release-PR gate.** Conventional Commits drive the
   version; release-plz opens a PR writing the version, the manifests and
-  `CHANGELOG.md`, and merging it tags `vX.Y.Z` **with a PAT** — the default
-  `GITHUB_TOKEN` would create a tag that triggers nothing and ship no crate. The
-  tag fires `release.yml`, which runs `scripts/publish-crate.sh`: it refuses a tag
-  that is not `vX.Y.Z` or that names a version the manifest does not, and skips a
-  version already live. Nobody hand-edits a version, hand-tags, or hand-dispatches
-  a publish.
+  `CHANGELOG.md`, and the release workflow arms GitHub auto-merge on it, so it
+  merges itself once the repository's required checks pass: a release has no
+  human step. Only `--auto` arms it, never `--admin`, so nothing merges past the
+  checks. The merge lands on `main` and the next run tags `vX.Y.Z` — both **with
+  a PAT**, because the default `GITHUB_TOKEN` would make a merge and a tag that
+  trigger nothing and ship no crate. The tag fires `release.yml`, which runs
+  `scripts/publish-crate.sh`: it refuses a tag that is not `vX.Y.Z` or that names
+  a version the manifest does not, and skips a version already live. Nobody
+  hand-edits a version, hand-tags, or hand-dispatches a publish.
 - **Bump policy (pre-1.0):** `feat` → minor; `feat!` / `BREAKING CHANGE` → minor
   (a break before 1.0 is not a major); `fix` / `perf` / `refactor` / `build` →
   patch; `chore` / `docs` / `ci` / `test` / `style` → no release.
